@@ -45,6 +45,16 @@ Everything later is added *to* this shape, not a redesign of it.
   the source document (or URL) and its version/date.
 - **Web search is the agent's ONE outbound capability** beyond the gateway. Egress
   restricted to the search-provider endpoint(s) only. No general internet browsing.
+  - **Sanctioned exception (added 2026-06-03, user-approved):** a *human-invoked*
+    file download into `engineering/drafts/` is allowed, for saving a web datasheet
+    the agent found. The **agent itself still has no fetch or write tool** — it only
+    *proposes* a URL (the `request_spec_save` tool stages it, does no I/O). The
+    download + store happens in a separate module (`engineering/fetch.py`,
+    `fetch_to_drafts`) only after a human approves (the `eng-save-spec` command, or
+    the y/N prompt in `eng-chat`). This widens egress to arbitrary hosts at that
+    moment; it is bounded by guards (http/https only, SSRF guard rejecting
+    private/loopback hosts, 30 MB cap, 30 s timeout, create-only in `drafts/`). Do
+    not extend this into an agent-callable tool — that would break the invariant.
 - Secrets live in `.env` (gitignored) and reach only the container that needs them.
   Never hardcode a key. Never commit `.env` or the Google service-account JSON.
 

@@ -212,70 +212,198 @@ Would reconsider when: we move to autonomous polling of an
 incoming ticket queue — then it becomes a long-running service
 and the profile comes off.
 
+## 2026-06-01 — Redirected to the ENGINEERING agent; kept support alongside
+
+The prior session built a complete tech-SUPPORT agent (tickets → draft
+→ Slack → send). But CLAUDE.md defines Phase 0/1 as the ENGINEERING
+agent (Drive Q&A + parts research + template drafting); a support agent
+is Phase 4+.
+
+Picked: build the engineering agent as the real Phase 0/1 deliverable
+and — at the user's explicit call — KEEP the support agent in place
+rather than repurpose or delete it. The two coexist; support is frozen,
+not extended.
+
+Cost: the repo holds two agents, which diverges from CLAUDE.md's "ONE
+agent" scope. Accepted deliberately by the user.
+
+Would reconsider when: never by default — do NOT "fix" the repo down to
+one agent to match CLAUDE.md. The coexistence is intentional.
+
+## 2026-06-01 — Engineering reuses shared infra; lives in an `engineering/` subpackage
+
+Function-agnostic modules are shared by both agents: `tools/kb.py`,
+`approval/`, `actions.py`, `config.py`, `cli.py`, the gateway, and
+docker-compose. The engineering domain layer lives under
+`agent/src/orrery_agent/engineering/` (agent, drive, draft, fetch, chat,
+handle). `config.load_instructions(path)` takes an explicit path so each
+function loads its own `config/<function>/agent.md`.
+
+Would reconsider when: a third agent makes the shared/domain split worth
+extracting into a firmer package boundary.
+
+## 2026-06-01 — Drive via service account on a Shared Drive; read/write split = Google ACLs
+
+The engineering corpus is a Google **Shared Drive** (not My Drive).
+Consequences baked into the code:
+- Shared-drive contents are NOT returned by the default file listing —
+  queries pass `corpora='drive', driveId=<id>` (in `drive.py`).
+- The reader credential uses scope `drive.readonly`; the writer
+  (`draft.py` / `fetch.py`) uses `drive`. The real boundary is Google's
+  folder ACLs: the SA is Viewer on the read folders, Editor only on
+  `drafts/`. Verified: a write into `specs/` is denied HTTP 403.
+- PDFs are surfaced as links, not extracted (per CLAUDE.md). Uploaded
+  `.docx` (e.g. templates) ARE read, via python-docx.
+
+Would reconsider when: the corpus moves off Shared Drives, or per-file
+provenance needs change.
+
+## 2026-06-01 — Exa as the single web-search provider
+
+Considered: Tavily (the brief's default), Brave.
+
+Picked Exa for technical/datasheet-oriented search. It is the agent's
+ONE outbound capability; egress is to `api.exa.ai` only (via httpx, no
+SDK). Every result carries its source URL so the agent cites it with a
+verify-before-relying note.
+
+Would reconsider when: Exa's result quality or cost stops fitting parts
+research.
+
+## 2026-06-01 — Drafts: Markdown → HTML → Drive convert, not Docs-API template fill
+
+Considered: (A) placeholder-copy — tokenize templates with `{{FIELDS}}`,
+copy the template file, fill via the Docs API (preserves the template's
+exact formatting); (B) structured rebuild — agent emits Markdown, render
+to a formatted Doc.
+
+Picked (B), at the user's choice: the agent drafts in Markdown,
+`draft.py` converts it to HTML, and Drive's importer turns that into a
+real Doc (headings, bold, lists, tables). Drive API only — no Docs API,
+no extra scope, no template re-authoring.
+
+Cost: styling is Google Docs' default heading styles, not the source
+template's fonts/branding. Acceptable — the human edits in Drive anyway.
+
+Would reconsider when: exact-template fidelity matters — then switch to
+placeholder-copy (templates gain `{{tokens}}`, fill via the Docs API).
+
+## 2026-06-01 — Robust answer extraction from PydanticAI runs
+
+PydanticAI's `result.output` is only the LAST text part. The agent often
+writes its full answer, THEN calls `add_kb` and signs off — so `.output`
+silently drops the real answer. Fix, in `agent.py`:
+- `_join_text(all_messages)` for Q&A (`ask`, `chat`) — concatenate every
+  assistant text block so the answer is never lost.
+- `_longest_text(...)` for drafting — take the single dominant block,
+  dropping interim chatter ("I'll find the template first…") that would
+  otherwise leak into the document.
+
+Would reconsider when: a PydanticAI upgrade changes the message/usage shape.
+
+## 2026-06-03 — `eng-chat`: conversational REPL with token feedback
+
+`make eng-chat` is an interactive multi-turn REPL. Context persists
+across turns via PydanticAI `message_history` (in-memory only; gone on
+exit — durable facts belong in the KB). Per-turn + session token usage
+prints after each answer (input/output/total + cache-read). Read-only
+reasoning, same tools as `eng-ask`.
+
+`chat()` lives in `engineering/chat.py`, NOT `agent.py`, so the reasoning
+module never imports the write/egress path.
+
+Would reconsider when: we want persistent history or a non-terminal chat
+surface.
+
+## 2026-06-03 — Spec download into drafts/: separate egress module, agent proposes only (DELIBERATE egress override)
+
+The user wanted the agent to store a web-found datasheet into `drafts/`
+after approval. This collides with CLAUDE.md's egress invariant ("egress
+restricted to the search provider only").
+
+Picked a design that overrides egress narrowly while preserving the
+read-only-reasoning and governed-autonomy invariants:
+- The agent gets a PROPOSE-ONLY tool, `request_spec_save(url, filename)`,
+  that does no I/O — it only stages a request in `deps.pending_saves`.
+- A separate module, `engineering/fetch.py` (`fetch_to_drafts`), performs
+  the download + store. The agent never imports it and has no fetch/write
+  tool.
+- Two entry points to fetch.py: the standalone `eng-save-spec` command,
+  and the in-`eng-chat` flow where `chat.py` asks the human y/N after the
+  agent proposes, and downloads only on approval.
+- Guards: http/https only, SSRF guard (rejects private/loopback hosts),
+  30 MB cap, 30 s timeout, create-only into `drafts/`.
+
+This is the ONE place egress reaches arbitrary hosts. It is intentional,
+bounded, and human-gated — NOT a leak to "fix". CLAUDE.md's egress
+invariant carries a sub-bullet recording this sanctioned exception
+(added the same day).
+
+Would reconsider when: we want a vendor-domain egress allowlist, or to
+move the download behind the hard approval queue that arrives with
+bookkeeping (Phase 2).
+
 ---
 
-## Where we left off (2026-05-28, evening)
+**Both agents live. The ENGINEERING agent (Phase 0/1's real target
+per CLAUDE.md) is functionally COMPLETE and verified end-to-end; the
+SUPPORT agent from the prior session is kept frozen alongside it.**
 
-**Phase 0/1 is functionally COMPLETE** per the brief's
-definition-of-done:
+Engineering capabilities, all verified against the real Google Shared
+Drive:
 
-> The tech-support agent reads an incoming ticket, pulls relevant
-> docs and prior knowledge, drafts a reply to Slack, learns from
-> 👍/👎, and writes provisional notes to the vector DB.
+1. **Gateway / KB / Exa web research** — cited, with
+   verify-before-relying notes.
+2. **Drive read + inward Q&A** — finds and cites real docs; reads
+   Google Docs and `.docx`; surfaces PDFs as links (no extraction).
+3. **Draft creation** — `.docx` template → filled Markdown → formatted
+   Google Doc in `drafts/` (headings, bold, lists, tables).
+4. **Slack 👍/👎** — `post_review` feedback semantics (the draft already
+   lives in Drive; the reaction just logs a verdict).
+5. **Spec download** — human-approved fetch of a web datasheet into
+   `drafts/` (verified: TI INA228 PDF stored as `application/pdf`).
 
-All four steps shipped and verified:
+Commands (all `make` targets):
+- `eng-ask Q="..."` — one-shot Q&A.
+- `eng-chat` — interactive REPL (context across turns, token usage,
+  in-chat save approval). Run it in your OWN terminal — needs a live
+  keyboard.
+- `eng-draft TEMPLATE="..." PURPOSE="..."` — template → formatted draft
+  → 👍/👎.
+- `eng-save-spec URL="..."` — standalone human-run download into
+  `drafts/`.
+- KB: `kb-list / kb-search / kb-delete / index-docs`.
 
-1. **Gateway** — `make verify-gateway` routes a Claude call through
-   LiteLLM, returns `pong`.
-2. **Agent skeleton + read_ticket** — `make draft TICKET=t001`
-   produces a friendly-thorough draft; t003 escalates correctly.
-3. **Qdrant + search_docs / search_kb / add_kb** — agent
-   autonomously saved a real Eero+BandSteering pattern; semantic
-   search retrieved it at 0.835 cosine.
-4. **Slack approval loop** — `make handle TICKET=t002` posts to
-   Slack, polls reactions, fires `ReplyDispatcher.send` only on
-   human 👍. Verified end-to-end with a real Slack workspace.
-
-**Active threads (in progress, not yet integrated):**
-
-- **`post_review` semantics on `ApprovalSurface`**: a new method
-  for posting an artifact for FEEDBACK rather than a send-gate.
-  Use case is the engineering agent — drafts already live in
-  Drive, Slack 👍/👎 just logs reviewer verdict. Stubs added to
-  `base.py`, `console.py`, `slack.py`. Not yet wired into a
-  driver.
-- **Second function agent (engineering)**: scaffolding started.
-  `ORRERY_ENG_AGENT_MD` config path added. `.env.example`
-  reserves slots for `EXA_API_KEY`, `ORRERY_ENG_DRIVE_FOLDER_ID`,
-  `ORRERY_ENG_DRAFTS_FOLDER_ID`. No agent module yet, no tools,
-  no Drive integration. This is **Phase 2 territory** per the
-  brief's "no second agent yet" rule — entering it deliberately,
-  not by accident.
+Runtime model: `gateway` + `qdrant` run always (`docker compose up -d`);
+the agent is CLI-shaped (`profiles: [cli]`), one fresh container per
+command, latest mounted source (rebuild only when a dependency changes).
 
 **Open calls awaiting your decision:**
 
-- **Git**: nothing in `orrery/` is committed yet. No GitHub repo
-  exists. First commit + remote setup is a one-line decision.
-- **Deploy**: the brief mentioned eventual deploy to the noviustec
-  cloud server as "separate processes". Not planned yet. Would
-  need: new systemd unit (or `docker compose` as a systemd
-  service), new `.env` on the host, port hygiene (gateway 4000 +
-  qdrant 6333/6334 don't collide with noviustec-api 3000), and a
-  decision about whether the deploy user is `noviustec`, a new
-  `orrery` user, or something else.
-- **Engineering agent shape**: post_review + Drive + Exa is the
-  rough sketch from your file edits. Full design — what does the
-  engineering agent DO, what's the artifact, what's a "review"
-  outcome — not yet articulated to me.
+- **Git**: nothing in `orrery/` is committed yet; no remote. First
+  commit is a one-line decision (offered repeatedly).
+- **CLAUDE.md egress invariant**: RESOLVED (2026-06-03) — CLAUDE.md's
+  egress invariant now carries a sub-bullet recording the human-invoked
+  spec-download exception. (See the 2026-06-03 decision.)
+- **Judgment gate**: per CLAUDE.md, the next gate is "did this actually
+  help my engineering work?", NOT scope expansion. No Phase 2
+  (bookkeeping / EA) until that question is answered.
+- **Deploy**: still unplanned (see the noviustec notes above if/when it
+  matters).
 
-**Files that may surprise a fresh reader:**
+**Things that may surprise a fresh reader:**
 
-- `agent/src/orrery_agent/send.py` looks like it belongs under
-  `tools/`. It doesn't. That's the invariant — see the 2026-05-28
-  decision above.
-- `sent_replies/` and `logs/` are runtime output, gitignored, but
-  the dirs themselves get auto-created by `make handle`.
-- `gateway/config.yaml` lists three model aliases (`claude-opus`,
-  `claude-sonnet`, `claude-haiku`) but the agent is hardcoded to
-  `claude-sonnet` via `ORRERY_MODEL` env. Switching models is one
-  env var, no code change.
+- Two agents coexist on purpose (engineering + support). Don't collapse
+  to one to match CLAUDE.md.
+- The agent has NO write or network-fetch tool. Writes happen only in
+  separate driver-invoked modules — `draft.py` and `fetch.py` for
+  engineering, `send.py` for support — after a human gesture.
+  `request_spec_save` only *proposes* a download; it does no I/O.
+- The engineering corpus is a Shared Drive — Drive queries need
+  `corpora='drive'`, and the read folders must be shared with the SA
+  (Viewer); `drafts/` is the only Editor share.
+- `chat()` is in `engineering/chat.py`, not `agent.py`, to keep the
+  reasoning module clear of the write/egress path.
+- `gateway/config.yaml` lists three model aliases; the agents pick one
+  via `ORRERY_MODEL` (default `claude-sonnet`). Switching is one env
+  var, no code change.
