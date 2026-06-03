@@ -1,0 +1,129 @@
+# Orrery — Phase 0/1 services come online incrementally.
+# Right now: just the LLM gateway. qdrant + agent get added in Step 3 / Step 2.
+
+name: orrery
+
+services:
+  gateway:
+    # LiteLLM is a small Python/FastAPI proxy that speaks the OpenAI
+    # chat-completions shape and forwards to whichever provider you
+    # config. We use it so:
+    #   1. The Anthropic key is in ONE place (this container only).
+    #   2. The agent code talks OpenAI-shape and we can swap providers
+    #      later without touching it.
+    #   3. We get rate-limit handling, retries, and observability for
+    #      free.
+    # `main-stable` is LiteLLM's "moving but tested" tag. Pin to a
+    # specific sha later when stability matters more than freshness.
+    image: ghcr.io/berriai/litellm:main-stable
+    container_name: orrery-gateway
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    env_file:
+      - .env
+    volumes:
+      # Mount the model-routing config read-only.
+      - ./gateway/config.yaml:/app/config.yaml:ro
+    command: ["--config", "/app/config.yaml", "--port", "4000", "--num_workers", "1"]
+    healthcheck:
+      # LiteLLM's image doesn't ship curl, so use Python (which is in
+      # the image regardless) to hit the liveliness endpoint.
+      test: ["CMD", "python", "-c", "import urllib.request,sys; urllib.request.urlopen('http://localhost:4000/health/liveliness', timeout=3).read(); sys.exit(0)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Qdrant — the knowledge-base vector DB. Two collections:
+  #   - docs:      curated, indexed from docs/ via `make index-docs`
+  #   - learnings: provisional, written by the agent's add_kb tool
+  # Data persists in a named volume so collections survive restarts.
+  # ─────────────────────────────────────────────────────────────────────
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    container_name: orrery-qdrant
+    restart: unless-stopped
+    ports:
+      # REST + gRPC dashboard at http://localhost:6333/dashboard
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    healthcheck:
+      # Qdrant's image ships bash but no curl/wget/python. Use bash's
+      # built-in /dev/tcp redirection to hit /healthz over HTTP and
+      # grep for a 200 response.
+      test:
+        - "CMD"
+        - "bash"
+        - "-c"
+        - "exec 3<>/dev/tcp/localhost/6333 && printf 'GET /healthz HTTP/1.0\\r\\n\\r\\n' >&3 && head -1 <&3 | grep -q 200"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ─────────────────────────────────────────────────────────────────────
+  # The support agent. CLI-style: not started by `compose up`, run via
+  # `make draft TICKET=t001` which uses `docker compose run --rm agent ...`.
+  # Source code is mounted from ./agent/src so editing is hot-reload —
+  # only pyproject.toml changes require `make build-agent`.
+  # ─────────────────────────────────────────────────────────────────────
+  agent:
+    build:
+      context: ./agent
+    container_name: orrery-agent
+    env_file:
+      - .env
+    environment:
+      # PydanticAI points at the in-network gateway service via
+      # docker's DNS; ports don't matter, the container talks
+      # gateway-side at 4000 directly.
+      ORRERY_GATEWAY_URL: "http://gateway:4000/v1"
+      ORRERY_MODEL: "claude-sonnet"
+      ORRERY_TICKETS_DIR: "/app/docs/sample_tickets"
+      ORRERY_QDRANT_URL: "http://qdrant:6333"
+      ORRERY_EMBED_MODEL: "BAAI/bge-small-en-v1.5"
+      # ── Engineering agent (Drive + Exa) ──────────────────────────
+      # Path the service-account key is mounted to (see commented mount
+      # below). Drive read/draft stay in the not-configured seam until
+      # this file exists AND the folder ids are set.
+      ORRERY_GOOGLE_SA_JSON: "/app/secrets/service-account.json"
+      # Drive folder ids — fill these in once the engineering/ tree is
+      # created and shared with the service account. EXA_API_KEY comes
+      # from .env via env_file.
+      ORRERY_ENG_DRIVE_FOLDER_ID: "${ORRERY_ENG_DRIVE_FOLDER_ID:-}"
+      ORRERY_ENG_DRAFTS_FOLDER_ID: "${ORRERY_ENG_DRAFTS_FOLDER_ID:-}"
+    volumes:
+      # Source / config / docs: read-only so the container can't
+      # write back into the repo. Behavior and knowledge stay
+      # human-authored.
+      - ./agent/src:/app/src:ro
+      - ./config:/app/config:ro
+      - ./docs:/app/docs:ro
+      # Google service-account key, read-only. Reaches only this
+      # container; the engineering agent reads it for Drive access.
+      - ./service-account.json:/app/secrets/service-account.json:ro
+      # Cache fastembed model downloads across container runs so we
+      # don't re-pull the ~30 MB model on every invocation.
+      - fastembed-cache:/root/.cache/fastembed
+      # Write-able mounts — Step 4. sent_replies/ holds approved
+      # drafts that "went out" (Phase 0 stub); logs/ holds the
+      # append-only actions.jsonl audit trail.
+      - ./sent_replies:/app/sent_replies
+      - ./logs:/app/logs
+    depends_on:
+      gateway:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    # `profiles: [cli]` keeps this service out of `docker compose up`.
+    # `docker compose run --rm agent ...` works regardless of profile.
+    profiles:
+      - cli
+
+volumes:
+  qdrant-data:
+  fastembed-cache:

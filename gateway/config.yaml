@@ -1,0 +1,43 @@
+# LiteLLM model-routing config. Each entry maps a "friendly" model name
+# the agent calls (model_name) to the underlying provider model string
+# (litellm_params.model). Changing providers later = edit this file,
+# no agent changes.
+#
+# Anthropic Claude 4.x model IDs (current as of 2026-05):
+#   claude-opus-4-7    — top capability, 1M context
+#   claude-sonnet-4-6  — workhorse balance, 1M context
+#   claude-haiku-4-5   — cheapest + fastest, 200K context
+#
+# Use claude-haiku for cheap smoke tests (verify-gateway, ticket
+# triage). Use claude-sonnet for the main agent reasoning loop. Save
+# opus for the cases that genuinely need it.
+
+model_list:
+  - model_name: claude-opus
+    litellm_params:
+      model: anthropic/claude-opus-4-7
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: claude-sonnet
+    litellm_params:
+      model: anthropic/claude-sonnet-4-6
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: claude-haiku
+    litellm_params:
+      model: anthropic/claude-haiku-4-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+litellm_settings:
+  # Drop noisy "user-agent" type fields the proxy adds before sending.
+  drop_params: true
+  # Don't fall through to an OS-level OpenAI key if a request references
+  # a model not declared above — surface the error instead.
+  set_verbose: false
+
+general_settings:
+  # Phase 0 dev: no auth in front of the proxy. The container is only
+  # exposed on localhost via the docker-compose port mapping. When we
+  # move to the noviustec cloud host, add a master key here AND don't
+  # bind 4000 to a public interface.
+  # master_key: os.environ/LITELLM_MASTER_KEY

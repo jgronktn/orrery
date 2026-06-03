@@ -1,0 +1,7 @@
+{
+  "id": "t001",
+  "subject": "Sensor offline after firmware 2.4.1 update",
+  "from": "linda.parsons@example.com",
+  "received_at": "2026-05-27T15:22:00Z",
+  "body": "Hi,\n\nMy VestaGuard sensor in the attic stopped showing up in the app yesterday morning. The LED on the device is solid amber and the app says 'Last seen 18 hours ago'. I checked and the firmware updated to 2.4.1 the night before this started — could that be related?\n\nMy Wi-Fi is working fine for everything else in the house. The sensor is the one above the upstairs air handler, about 25 feet from the router.\n\nThanks,\nLinda"
+}

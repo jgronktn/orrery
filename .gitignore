@@ -1,0 +1,33 @@
+# Secrets — never commit
+.env
+# Google service-account key for the engineering agent's Drive access.
+service-account.json
+*.iam.gserviceaccount.com.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Docker / runtime
+qdrant_data/
+.docker-data/
+
+# Agent runtime output — sent replies + actions audit log. Sensitive
+# (customer correspondence) and machine-generated.
+sent_replies/
+logs/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
