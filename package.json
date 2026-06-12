@@ -1,0 +1,14 @@
+{
+  "name": "orrery",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Orrery monorepo — npm workspace root for the frontend.",
+  "workspaces": [
+    "web/frontend"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace web/frontend",
+    "build": "npm run build --workspace web/frontend",
+    "gen:types": "npm run gen:types --workspace web/frontend"
+  }
+}

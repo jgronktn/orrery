@@ -10,6 +10,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+from orrery_lib.schema import Artifact, Proposal
+
 
 class RegisterIn(BaseModel):
     email: EmailStr
@@ -46,3 +48,57 @@ class AgentSummary(BaseModel):
     id: str
     name: str
     description: str
+
+
+# ── Projects ────────────────────────────────────────────────────────
+
+
+class ProjectIn(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    description: str | None = None
+
+
+class ProjectOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    description: str | None
+    archived: bool
+    created_at: datetime
+    role: str = "member"  # the requesting user's role in this project
+
+
+# ── Tasks (minimal; schema ready for the future PM agent) ───────────
+
+
+class TaskIn(BaseModel):
+    title: str = Field(min_length=1, max_length=300)
+
+
+class TaskOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    title: str
+    status: str
+    created_at: datetime
+
+
+# ── Conversation (persisted, keyed on user+agent+project) ───────────
+
+
+class SendMessageIn(BaseModel):
+    query: str = Field(min_length=1)
+    project_id: uuid.UUID | None = None  # None = global context
+
+
+class MessageOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    role: str
+    content: str
+    artifacts: list[Artifact] | None = None
+    proposals: list[Proposal] | None = None
+    created_at: datetime

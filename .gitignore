@@ -31,3 +31,8 @@ logs/
 .idea/
 .DS_Store
 *.swp
+
+# Node / frontend
+node_modules/
+web/frontend/dist/
+package-lock.json
