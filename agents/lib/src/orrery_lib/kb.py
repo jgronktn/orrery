@@ -34,6 +34,10 @@ from qdrant_client import QdrantClient, models
 
 QDRANT_URL = os.environ.get("ORRERY_QDRANT_URL", "http://qdrant:6333")
 EMBED_MODEL = os.environ.get("ORRERY_EMBED_MODEL", "BAAI/bge-small-en-v1.5")
+# fastembed cache. When the container runs non-root, the default
+# (~/.cache under /root) is unreadable — point it at a world-readable
+# baked-in path via ORRERY_FASTEMBED_CACHE.
+FASTEMBED_CACHE = os.environ.get("ORRERY_FASTEMBED_CACHE") or None
 
 # Vector dimension for BAAI/bge-small-en-v1.5. If you change models,
 # update this too — fastembed exposes the dim on the model_card but
@@ -61,7 +65,7 @@ _client: QdrantClient | None = None
 def get_embedder() -> TextEmbedding:
     global _embedder
     if _embedder is None:
-        _embedder = TextEmbedding(EMBED_MODEL)
+        _embedder = TextEmbedding(EMBED_MODEL, cache_dir=FASTEMBED_CACHE)
     return _embedder
 
 

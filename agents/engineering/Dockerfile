@@ -22,11 +22,14 @@ COPY engineering/pyproject.toml ./engineering/
 COPY engineering/src ./engineering/src
 RUN pip install --no-cache-dir -e ./engineering
 
-# Prefetch the embedding model so first-run isn't a 30 MB download.
-# Caches under /root/.cache/fastembed (a named volume in compose).
-RUN python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-small-en-v1.5')"
+# Prefetch the embedding model into a world-readable, world-writable path
+# (not /root/.cache) so the container works when run as a non-root UID.
+ENV ORRERY_FASTEMBED_CACHE=/opt/fastembed
+RUN mkdir -p /opt/fastembed && chmod 777 /opt/fastembed \
+    && python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-small-en-v1.5', cache_dir='/opt/fastembed')"
 
 ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+    PYTHONDONTWRITEBYTECODE=1 \
+    HOME=/tmp
 
 ENTRYPOINT ["python", "-m", "orrery_engineering"]
