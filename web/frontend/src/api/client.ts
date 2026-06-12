@@ -16,6 +16,7 @@ export type ProjectIn = components["schemas"]["ProjectIn"];
 export type Task = components["schemas"]["TaskOut"];
 export type Message = components["schemas"]["MessageOut"];
 export type SendMessageIn = components["schemas"]["SendMessageIn"];
+export type ProposalRecord = components["schemas"]["ProposalOut"];
 
 export class ApiError extends Error {
   status: number;
@@ -94,4 +95,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+
+  // Approval queue
+  listApprovals: () => request<ProposalRecord[]>("/api/approvals"),
+  approveProposal: (id: string) =>
+    request<ProposalRecord>(`/api/approvals/${id}/approve`, { method: "POST" }),
+  rejectProposal: (id: string) =>
+    request<ProposalRecord>(`/api/approvals/${id}/reject`, { method: "POST" }),
 };

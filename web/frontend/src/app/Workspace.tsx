@@ -5,8 +5,10 @@ import {
   ApiError,
   type Message,
   type Project,
+  type ProposalRecord,
   type Task,
 } from "../api/client";
+import Approvals from "./Approvals";
 import Messages from "./Messages";
 import Projects from "./Projects";
 import Tasks from "./Tasks";
@@ -18,13 +20,27 @@ export default function Workspace() {
   const [activeId, setActiveId] = useState<string | null>(null); // null = global
   const [messages, setMessages] = useState<Message[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [approvals, setApprovals] = useState<ProposalRecord[]>([]);
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const loadApprovals = () =>
+    api.listApprovals().then(setApprovals).catch(console.error);
+
   useEffect(() => {
     api.listProjects().then(setProjects).catch(console.error);
+    void loadApprovals();
   }, []);
+
+  const approve = async (id: string) => {
+    await api.approveProposal(id);
+    void loadApprovals();
+  };
+  const reject = async (id: string) => {
+    await api.rejectProposal(id);
+    void loadApprovals();
+  };
 
   // Load the (persisted) conversation + tasks whenever the context changes.
   useEffect(() => {
@@ -81,6 +97,8 @@ export default function Workspace() {
         project_id: activeId,
       });
       setMessages((prev) => [...prev, assistant]);
+      void loadApprovals(); // a turn may have queued proposals
+
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Agent request failed");
     } finally {
@@ -97,14 +115,7 @@ export default function Workspace() {
     <div className="grid grid-cols-[20rem_1fr] gap-4 h-full min-h-0">
       {/* Left column: approvals, projects, tasks, ask box */}
       <aside className="flex flex-col gap-4 min-h-0 overflow-y-auto">
-        <section className="rounded-xl border border-slate-200 bg-white p-4">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Pending approvals
-          </h2>
-          <p className="mt-2 text-sm text-slate-400">
-            None yet. (The approval queue arrives in a later step.)
-          </p>
-        </section>
+        <Approvals proposals={approvals} onApprove={approve} onReject={reject} />
 
         <Projects
           projects={projects}

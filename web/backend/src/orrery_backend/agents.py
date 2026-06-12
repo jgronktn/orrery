@@ -15,14 +15,16 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
 
-from orrery_lib.schema import AgentRequest, AgentResponse, ConversationTurn
+from orrery_lib.schema import AgentRequest, AgentResponse, ConversationTurn, Risk
 
 from .auth import current_user
 from .config import settings
 from .db import get_db
-from .models import Conversation, Message, Project, User
+from .governance import classify, execute_proposal
+from .models import Conversation, Message, ProposalRecord, Project, User
 from .projects import require_membership
 from .schemas import AgentSummary, MessageOut, SendMessageIn
+from .slack import notify_approval
 
 
 @dataclass(frozen=True)
@@ -157,6 +159,31 @@ async def send_message(
             status.HTTP_502_BAD_GATEWAY, f"agent '{agent_id}' error: {exc}"
         )
     answer = AgentResponse.model_validate(resp.json())
+
+    # Route each proposal: low auto-executes; medium/high queue for approval
+    # (with a Slack heads-up). The honest, possibly-overridden risk is
+    # reflected back into the stored message so the UI and queue agree.
+    for p in answer.proposals:
+        final = classify(p.kind, p.risk.value)
+        p.risk = Risk(final)
+        record = ProposalRecord(
+            user_id=user.id,
+            conversation_id=conv.id,
+            project_id=body.project_id,
+            agent_id=agent_id,
+            kind=p.kind,
+            summary=p.summary,
+            risk=final,
+            payload=p.payload,
+            status="pending",
+        )
+        db.add(record)
+        db.flush()
+        if final == "low":
+            record.decided_by = user.id
+            await execute_proposal(db, record, agent.url)
+        else:
+            notify_approval(p.summary, final)
 
     db.add(Message(conversation_id=conv.id, role="user", content=body.query))
     assistant = Message(

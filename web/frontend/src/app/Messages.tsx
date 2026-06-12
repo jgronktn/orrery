@@ -103,13 +103,11 @@ function ProposalCard({ proposal }: { proposal: Proposal }) {
         </span>
       </div>
       <p className="mt-1 text-slate-600">{proposal.summary}</p>
-      <button
-        disabled
-        title="The approval queue arrives in a later step"
-        className="mt-2 rounded bg-slate-300 px-2 py-1 text-xs text-slate-600 cursor-not-allowed"
-      >
-        Approve (coming soon)
-      </button>
+      <p className="mt-1 text-xs text-slate-400">
+        {proposal.risk === "low"
+          ? "Low risk — auto-approved."
+          : "Sent to the approvals queue →"}
+      </p>
     </div>
   );
 }

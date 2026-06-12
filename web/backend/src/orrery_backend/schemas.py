@@ -102,3 +102,21 @@ class MessageOut(BaseModel):
     artifacts: list[Artifact] | None = None
     proposals: list[Proposal] | None = None
     created_at: datetime
+
+
+# ── Approval queue ──────────────────────────────────────────────────
+
+
+class ProposalOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    agent_id: str
+    kind: str
+    summary: str
+    risk: str
+    status: str
+    payload: dict
+    result: dict | None = None
+    project_id: uuid.UUID | None = None
+    created_at: datetime

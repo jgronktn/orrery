@@ -30,6 +30,7 @@ from orrery_lib.schema import (
 
 from .agent import EngineeringDeps, _join_text, build_agent
 from .drive import build_drive_reader
+from .fetch import fetch_to_drafts
 
 
 def _to_message_history(turns: list[ConversationTurn]):
@@ -69,3 +70,20 @@ async def run_once(req: AgentRequest) -> AgentResponse:
     ]
 
     return AgentResponse(text=text, proposals=proposals)
+
+
+def execute_action(kind: str, payload: dict) -> dict:
+    """Execute an APPROVED proposal — a bounded write path, invoked only by
+    the backend after governance routing (low-risk auto, or human approval).
+    The reasoning loop (`run_once`) never reaches this; it only proposes.
+
+    Returns a JSON-able result describing what was done.
+    """
+    if kind == "save_spec":
+        created = fetch_to_drafts(payload["url"], name=payload.get("filename"))
+        return {
+            "file_id": created.file_id,
+            "name": created.name,
+            "web_view_link": created.web_view_link,
+        }
+    raise ValueError(f"unknown action kind: {kind!r}")

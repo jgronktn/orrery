@@ -1,6 +1,7 @@
 """Backend settings, read from the environment."""
 from __future__ import annotations
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -27,6 +28,11 @@ class Settings(BaseSettings):
 
     # CORS origins for the future frontend (Vite dev server).
     cors_origins: list[str] = ["http://localhost:5173"]
+
+    # Slack (approval-queue notifications). Read from the unprefixed env
+    # vars the rest of the stack already uses. Empty → log instead of post.
+    slack_bot_token: str = Field("", validation_alias="SLACK_BOT_TOKEN")
+    slack_approval_channel: str = Field("", validation_alias="SLACK_APPROVAL_CHANNEL")
 
     env: str = "dev"
 
