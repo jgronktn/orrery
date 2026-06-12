@@ -11,9 +11,11 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Shared library first — the engineering agent's `orrery-lib` dependency.
+# Shared library first — the engineering agent's `orrery-lib[agent]`
+# dependency (the [agent] extra pulls the heavy deps: pydantic-ai, qdrant,
+# fastembed, google-api, python-docx).
 COPY lib ./lib
-RUN pip install --no-cache-dir ./lib
+RUN pip install --no-cache-dir "./lib[agent]"
 
 # The engineering agent, editable.
 COPY engineering/pyproject.toml ./engineering/

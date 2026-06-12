@@ -1,0 +1,34 @@
+"""Backend settings, read from the environment."""
+from __future__ import annotations
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="ORRERY_", extra="ignore")
+
+    # Postgres (SQLAlchemy + psycopg v3).
+    database_url: str = (
+        "postgresql+psycopg://orrery:orrery@postgres:5432/orrery"
+    )
+
+    # Session signing + cookie. SESSION_SECRET MUST be set in prod.
+    session_secret: str = "dev-insecure-change-me"
+    session_cookie_name: str = "orrery_session"
+    session_ttl_hours: int = 24 * 14  # sliding 14-day window
+    cookie_secure: bool = False  # True behind HTTPS in prod
+    cookie_samesite: str = "lax"
+
+    # Password-reset token lifetime.
+    reset_ttl_minutes: int = 60
+
+    # Agent HTTP services (the backend is the only caller).
+    engineering_agent_url: str = "http://engineering:8001"
+
+    # CORS origins for the future frontend (Vite dev server).
+    cors_origins: list[str] = ["http://localhost:5173"]
+
+    env: str = "dev"
+
+
+settings = Settings()

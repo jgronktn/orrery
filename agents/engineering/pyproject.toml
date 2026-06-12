@@ -8,11 +8,14 @@ version = "0.1.0"
 description = "Orrery engineering agent — Drive Q&A, parts research, template drafting."
 requires-python = ">=3.12"
 dependencies = [
-    "orrery-lib",
+    "orrery-lib[agent]",
     "pydantic-ai>=0.4,<1.0",
     "httpx>=0.27,<1.0",
     "google-api-python-client>=2.0,<3.0",
     "markdown>=3.5,<4.0",
+    # HTTP service (the agent is a stateless service the backend calls).
+    "fastapi>=0.110,<1.0",
+    "uvicorn[standard]>=0.29,<1.0",
 ]
 
 [project.optional-dependencies]

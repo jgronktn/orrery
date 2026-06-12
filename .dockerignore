@@ -1,0 +1,16 @@
+.git
+**/__pycache__
+**/*.pyc
+**/*.pyo
+.venv
+venv
+*.egg-info
+.pytest_cache
+.mypy_cache
+.ruff_cache
+logs
+sent_replies
+node_modules
+web/frontend
+.env
+service-account.json

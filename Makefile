@@ -1,7 +1,7 @@
 # Ergonomic targets for the day-to-day. Run `make` with no args to see
 # this help.
 
-.PHONY: help up down restart logs verify-gateway ps build-agent ask chat draft save-spec actions index-docs kb-search kb-list kb-delete
+.PHONY: help up down restart logs backend-logs verify-gateway ps build build-agent ask chat draft save-spec actions index-docs kb-search kb-list kb-delete
 
 help: ## Show this help.
 	@awk 'BEGIN{FS=":.*## "; printf "Targets:\n"} /^[a-zA-Z_-]+:.*## / {printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -18,11 +18,17 @@ restart: ## Restart all services (picks up config file changes).
 logs: ## Tail gateway logs (Ctrl-C to detach).
 	docker compose logs -f --tail=200 gateway
 
+backend-logs: ## Tail backend logs (Ctrl-C to detach).
+	docker compose logs -f --tail=200 backend
+
 ps: ## Show running services.
 	docker compose ps
 
-build-agent: ## Rebuild the agent container (only needed when pyproject.toml changes).
-	docker compose build agent
+build: ## Build all images (engineering agent + backend).
+	docker compose build
+
+build-agent: ## Rebuild the engineering agent image (shared by HTTP + CLI).
+	docker compose build engineering
 
 ask: ## Ask the engineering agent (read-only). Usage: make ask Q="find our V2 FCC cert"
 	@if [ -z "$(Q)" ]; then echo 'usage: make ask Q="your question"'; exit 1; fi

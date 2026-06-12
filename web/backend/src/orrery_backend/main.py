@@ -1,0 +1,32 @@
+"""FastAPI application entry point."""
+from __future__ import annotations
+
+import logging
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from .agents import router as agents_router
+from .auth import router as auth_router
+from .config import settings
+
+logging.basicConfig(level=logging.INFO)
+
+app = FastAPI(title="Orrery Backend", version="0.1.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.get("/health")
+def health() -> dict:
+    return {"status": "ok", "service": "backend", "env": settings.env}
+
+
+app.include_router(auth_router)
+app.include_router(agents_router)

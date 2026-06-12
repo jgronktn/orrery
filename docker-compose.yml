@@ -1,7 +1,30 @@
-# Orrery — Phase 0/1 services come online incrementally.
-# Right now: just the LLM gateway. qdrant + agent get added in Step 3 / Step 2.
+# Orrery local dev stack: gateway + qdrant + engineering agent (HTTP) +
+# backend + postgres. The CLI agent shares the engineering image.
 
 name: orrery
+
+# ── Shared config for the engineering agent image (HTTP service + CLI) ──
+x-engineering-build: &engineering-build
+  build:
+    context: ./agents
+    dockerfile: engineering/Dockerfile
+
+x-engineering-env: &engineering-env
+  ORRERY_GATEWAY_URL: "http://gateway:4000/v1"
+  ORRERY_MODEL: "claude-sonnet"
+  ORRERY_QDRANT_URL: "http://qdrant:6333"
+  ORRERY_EMBED_MODEL: "BAAI/bge-small-en-v1.5"
+  ORRERY_GOOGLE_SA_JSON: "/app/secrets/service-account.json"
+  ORRERY_ENG_DRIVE_FOLDER_ID: "${ORRERY_ENG_DRIVE_FOLDER_ID:-}"
+  ORRERY_ENG_DRAFTS_FOLDER_ID: "${ORRERY_ENG_DRAFTS_FOLDER_ID:-}"
+
+x-engineering-volumes: &engineering-volumes
+  - ./agents/engineering/src:/app/engineering/src:ro
+  - ./config:/app/config:ro
+  - ./docs:/app/docs:ro
+  - ./service-account.json:/app/secrets/service-account.json:ro
+  - fastembed-cache:/root/.cache/fastembed
+  - ./logs:/app/logs
 
 services:
   gateway:
@@ -66,57 +89,122 @@ services:
       start_period: 10s
 
   # ─────────────────────────────────────────────────────────────────────
-  # The engineering agent. CLI-style: not started by `compose up`, run via
-  # `make chat` / `make ask Q="..."` which use `docker compose run --rm
-  # agent ...`. Source is mounted from ./agents/engineering/src so editing
-  # is hot-reload — only dependency changes (pyproject.toml) require
-  # `make build-agent`.
+  # Engineering agent as an HTTP service. The backend calls it at
+  # http://engineering:8001/run. Stateless — conversation state lives in
+  # the backend.
   # ─────────────────────────────────────────────────────────────────────
-  agent:
-    build:
-      context: ./agents
-      dockerfile: engineering/Dockerfile
-    container_name: orrery-agent
+  engineering:
+    <<: *engineering-build
+    image: orrery-engineering:latest
+    container_name: orrery-engineering
     env_file:
       - .env
-    environment:
-      # PydanticAI points at the in-network gateway service via
-      # docker's DNS; ports don't matter, the container talks
-      # gateway-side at 4000 directly.
-      ORRERY_GATEWAY_URL: "http://gateway:4000/v1"
-      ORRERY_MODEL: "claude-sonnet"
-      ORRERY_QDRANT_URL: "http://qdrant:6333"
-      ORRERY_EMBED_MODEL: "BAAI/bge-small-en-v1.5"
-      # ── Drive (service account) ──────────────────────────────────
-      ORRERY_GOOGLE_SA_JSON: "/app/secrets/service-account.json"
-      # Drive folder ids; EXA_API_KEY comes from .env via env_file.
-      ORRERY_ENG_DRIVE_FOLDER_ID: "${ORRERY_ENG_DRIVE_FOLDER_ID:-}"
-      ORRERY_ENG_DRAFTS_FOLDER_ID: "${ORRERY_ENG_DRAFTS_FOLDER_ID:-}"
-    volumes:
-      # Source / config / docs: read-only so the container can't
-      # write back into the repo. Behavior and knowledge stay
-      # human-authored.
-      - ./agents/engineering/src:/app/engineering/src:ro
-      - ./config:/app/config:ro
-      - ./docs:/app/docs:ro
-      # Google service-account key, read-only. Reaches only this
-      # container; the engineering agent reads it for Drive access.
-      - ./service-account.json:/app/secrets/service-account.json:ro
-      # Cache fastembed model downloads across container runs so we
-      # don't re-pull the ~30 MB model on every invocation.
-      - fastembed-cache:/root/.cache/fastembed
-      # Append-only actions.jsonl audit trail.
-      - ./logs:/app/logs
+    environment: *engineering-env
+    volumes: *engineering-volumes
+    # Override the image's CLI entrypoint to run the HTTP server.
+    entrypoint: ["uvicorn"]
+    command:
+      - "orrery_engineering.server:app"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8001"
+      - "--reload"
+      - "--reload-dir"
+      - "/app/engineering/src"
+    ports:
+      - "8001:8001"  # exposed for debugging; the backend uses the in-network name
     depends_on:
       gateway:
         condition: service_healthy
       qdrant:
         condition: service_healthy
-    # `profiles: [cli]` keeps this service out of `docker compose up`.
-    # `docker compose run --rm agent ...` works regardless of profile.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; urllib.request.urlopen('http://localhost:8001/health', timeout=3).read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # ─────────────────────────────────────────────────────────────────────
+  # The same image as a CLI. Not started by `compose up` (profile: cli);
+  # run via `make chat` / `make ask Q="..."`.
+  # ─────────────────────────────────────────────────────────────────────
+  agent:
+    <<: *engineering-build
+    image: orrery-engineering:latest
+    container_name: orrery-agent-cli
+    env_file:
+      - .env
+    environment: *engineering-env
+    volumes: *engineering-volumes
+    entrypoint: ["python", "-m", "orrery_engineering"]
+    depends_on:
+      gateway:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
     profiles:
       - cli
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Postgres — backend's database (users, sessions, and later projects,
+  # proposals, etc.). Dev credentials; override in prod.
+  # ─────────────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16
+    container_name: orrery-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: orrery
+      POSTGRES_PASSWORD: orrery
+      POSTGRES_DB: orrery
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orrery -d orrery"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Web backend (FastAPI). Mediates everything: auth, agent routing.
+  # Runs alembic migrations on start, then uvicorn.
+  # ─────────────────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: web/backend/Dockerfile
+    container_name: orrery-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      ORRERY_DATABASE_URL: "postgresql+psycopg://orrery:orrery@postgres:5432/orrery"
+      ORRERY_ENGINEERING_AGENT_URL: "http://engineering:8001"
+      ORRERY_SESSION_SECRET: "${ORRERY_SESSION_SECRET:-dev-insecure-change-me}"
+      ORRERY_ENV: "dev"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./web/backend/src:/app/backend/src
+      - ./web/backend/alembic:/app/backend/alembic
+    depends_on:
+      postgres:
+        condition: service_healthy
+      engineering:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; urllib.request.urlopen('http://localhost:8000/health', timeout=3).read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
 
 volumes:
   qdrant-data:
   fastembed-cache:
+  postgres-data:
