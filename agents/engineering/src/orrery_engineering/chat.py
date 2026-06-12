@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import asyncio
 
-from .. import actions
+from . import actions
 from .agent import EngineeringDeps, _join_text, build_agent
 from .drive import build_drive_reader
 from .fetch import fetch_to_drafts

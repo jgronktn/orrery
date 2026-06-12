@@ -17,7 +17,7 @@ from dataclasses import dataclass
 
 import httpx
 
-from . import NotConfiguredError
+from orrery_lib import NotConfiguredError
 
 EXA_API_KEY = os.environ.get("EXA_API_KEY", "").strip()
 

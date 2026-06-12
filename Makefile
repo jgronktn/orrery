@@ -1,7 +1,7 @@
 # Ergonomic targets for the day-to-day. Run `make` with no args to see
 # this help.
 
-.PHONY: help up down restart logs verify-gateway ps build-agent draft handle eng-ask eng-chat eng-draft eng-save-spec actions index-docs kb-search kb-list kb-delete
+.PHONY: help up down restart logs verify-gateway ps build-agent ask chat draft save-spec actions index-docs kb-search kb-list kb-delete
 
 help: ## Show this help.
 	@awk 'BEGIN{FS=":.*## "; printf "Targets:\n"} /^[a-zA-Z_-]+:.*## / {printf "  %-22s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -24,31 +24,22 @@ ps: ## Show running services.
 build-agent: ## Rebuild the agent container (only needed when pyproject.toml changes).
 	docker compose build agent
 
-draft: ## Draft a reply for a ticket (read-only). Usage: make draft TICKET=t001
-	@if [ -z "$(TICKET)" ]; then echo "usage: make draft TICKET=<id>"; exit 1; fi
-	docker compose run --rm agent draft --ticket $(TICKET)
+ask: ## Ask the engineering agent (read-only). Usage: make ask Q="find our V2 FCC cert"
+	@if [ -z "$(Q)" ]; then echo 'usage: make ask Q="your question"'; exit 1; fi
+	docker compose run --rm agent ask "$(Q)"
 
-handle: ## Full flow: draft → approve → send. Usage: make handle TICKET=t001 [SURFACE=slack|console]
-	@if [ -z "$(TICKET)" ]; then echo "usage: make handle TICKET=<id> [SURFACE=slack|console]"; exit 1; fi
-	@mkdir -p sent_replies logs
-	docker compose run --rm -e ORRERY_APPROVAL_SURFACE=$(or $(SURFACE),) agent handle --ticket $(TICKET)
+chat: ## Interactive chat with the engineering agent (keeps context across turns).
+	docker compose run --rm agent chat
 
-eng-ask: ## Ask the engineering agent (read-only). Usage: make eng-ask Q="find our V2 FCC cert"
-	@if [ -z "$(Q)" ]; then echo 'usage: make eng-ask Q="your question"'; exit 1; fi
-	docker compose run --rm agent eng-ask "$(Q)"
-
-eng-chat: ## Interactive chat with the engineering agent (keeps context across turns).
-	docker compose run --rm agent eng-chat
-
-eng-draft: ## Draft from a template into drafts/. Usage: make eng-draft TEMPLATE="SOW" PURPOSE="..." [SURFACE=console|slack]
-	@if [ -z "$(TEMPLATE)" ] || [ -z "$(PURPOSE)" ]; then echo 'usage: make eng-draft TEMPLATE="SOW" PURPOSE="what it is for"'; exit 1; fi
+draft: ## Draft from a template into drafts/. Usage: make draft TEMPLATE="SOW" PURPOSE="..." [SURFACE=console|slack]
+	@if [ -z "$(TEMPLATE)" ] || [ -z "$(PURPOSE)" ]; then echo 'usage: make draft TEMPLATE="SOW" PURPOSE="what it is for"'; exit 1; fi
 	@mkdir -p logs
-	docker compose run --rm -e ORRERY_APPROVAL_SURFACE=$(or $(SURFACE),) agent eng-draft --template "$(TEMPLATE)" --purpose "$(PURPOSE)"
+	docker compose run --rm -e ORRERY_APPROVAL_SURFACE=$(or $(SURFACE),) agent draft --template "$(TEMPLATE)" --purpose "$(PURPOSE)"
 
-eng-save-spec: ## Download a file URL into drafts/ (human-invoked). Usage: make eng-save-spec URL="https://..." [NAME="part.pdf"]
-	@if [ -z "$(URL)" ]; then echo 'usage: make eng-save-spec URL="https://..." [NAME="file.pdf"]'; exit 1; fi
+save-spec: ## Download a file URL into drafts/ (human-invoked). Usage: make save-spec URL="https://..." [NAME="part.pdf"]
+	@if [ -z "$(URL)" ]; then echo 'usage: make save-spec URL="https://..." [NAME="file.pdf"]'; exit 1; fi
 	@mkdir -p logs
-	docker compose run --rm -T agent eng-save-spec --url "$(URL)" $(if $(NAME),--name "$(NAME)",)
+	docker compose run --rm -T agent save-spec --url "$(URL)" $(if $(NAME),--name "$(NAME)",)
 
 actions: ## Tail the actions audit log.
 	@tail -f logs/actions.jsonl 2>/dev/null || echo "(no actions logged yet)"

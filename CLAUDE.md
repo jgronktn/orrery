@@ -1,143 +1,273 @@
 # CLAUDE.md — project guide for Claude Code
 
 ## What this is
-Internal AI-agent system for a tiny hardtech company. **Phase 0/1 (minimal cut)**: one
-function-scoped agent for **engineering** that helps with documents and parts research.
-The agent reads, finds, and drafts — a human reviews and edits the actual work.
-We are building the smallest honest slice to prove the premise, **not** the full system.
-Bias toward less.
+
+**Orrery** — an internal AI-agent system for a tiny hardtech company. A
+coordinated set of function-scoped agents (engineering today; bookkeeping,
+corporate, executive assistant, project management to come), plus a web UI and
+backend that wraps them in a user-facing application with authentication,
+projects, an approval queue, and email integration.
+
+This is a **monorepo** — agents and web app live in one project tree, share
+common Python utilities, and are orchestrated together. Within the repo, agents
+are HTTP services; the web backend mediates all communication.
+
+Bias toward less. Resist scope creep. Pause after each step.
+
+## Repository layout (the Orrery monorepo)
+
+```
+orrery/                          # this repo, ~/code/orrery/
+├── agents/
+│   ├── engineering/             # the engineering agent (Phase 1, exists)
+│   │   ├── pyproject.toml
+│   │   ├── Dockerfile
+│   │   └── src/
+│   ├── lib/                     # Python utilities shared across agents
+│   │   ├── pyproject.toml
+│   │   └── src/                 # gateway client, KB wrapper, Drive helpers,
+│   │                            # agent response schema, proposal types
+│   └── (future: bookkeeping/, corporate/, ea/, pm/)
+│
+├── web/
+│   ├── backend/                 # FastAPI app (auth, projects, routing,
+│   │   ├── pyproject.toml       # approvals, email, agent registry)
+│   │   ├── alembic/             # database migrations
+│   │   └── src/
+│   └── frontend/                # React + Vite + TypeScript
+│       ├── package.json
+│       └── src/
+│
+├── infra/                       # orchestration & deployment
+│   ├── docker-compose.yml       # full local dev stack
+│   ├── docker-compose.prod.yml  # Droplet deployment (later)
+│   └── .env.example
+│
+├── config/
+│   └── engineering/agent.md     # engineering agent's behavior config
+│
+├── docs/                        # architecture, decisions, diagrams
+│
+├── pyproject.toml               # uv workspace root
+├── package.json                 # pnpm/npm workspace root (for frontend)
+└── README.md
+```
+
+- The agent's **behavior** config (markdown) lives in `config/`, not under
+  `agents/`. The agent's **code** lives under `agents/engineering/`. Behavior
+  is config; code is code; keep them separate.
+- The **shared agent library** at `agents/lib/` holds anything more than one
+  agent needs: the LiteLLM gateway client, the KB (Qdrant) wrapper, the Drive
+  service-account helpers, the agent response schema, the proposal/risk types,
+  the embedding model pin. Each agent imports from `agents/lib` rather than
+  re-implementing.
+- The **agent response schema** (text + artifacts + proposals) is defined ONCE
+  in `agents/lib/` and imported by both the agents and the web backend. The
+  frontend gets TypeScript types generated from FastAPI's OpenAPI export.
 
 ## The destination (context only — do NOT build all of this now)
-Long-term function sequence:
-1. **Engineering agent** (this phase) — document Q&A, parts research, template-based drafting.
-2. **Bookkeeping agent** — adds the proper approval queue, because bookkeeping proposes
-   changes that affect the books and warrants a hard gate.
-3. **Corporate documents + Executive Assistant agent** (combined) — corporate is the
-   EA's home function; the EA's distinguishing capability is cross-agent reach via the
-   shared knowledge base. **In its initial phase, the EA is available only to
-   founder / CEO / CFO roles.** Broader role access waits for proper scope inheritance.
-4. **Phase 4+** — multi-user scope inheritance for the EA, then the remaining function
-   agents (support, marketing, IT-ops, customer-service), and the full governance
-   infrastructure.
 
-Everything later is added *to* this shape, not a redesign of it.
+Long-term, Orrery serves multiple agents and multiple users with per-user
+permissions. Navigation is project-primary: users think in projects, agents are
+tools that help. Email is integrated via opt-in assignment. Governance is
+risk-classified, not all-or-nothing. Everything later is added *to* this shape,
+not a redesign of it.
 
 ## Principles — honor even in the minimal version
-1. **Function-shaped, not chat-shaped** — the agent owns engineering, with its own
-   config and memory; it is not a generic assistant.
-2. **Governed autonomy** — the agent DRAFTS, FINDS, PROPOSES. A human reviews and edits
-   the actual artifact. The agent never modifies or sends finalized work.
-3. **Behavior in git, facts in memory, kept separate** — behavior lives in a versioned
-   markdown config file; facts the agent learns live in the vector DB. Never mix them.
+
+1. **Project-primary navigation** — users work in project context, not agent
+   context. UI leads with projects; agent selection is secondary or automatic.
+
+2. **Governed autonomy with risk classification** — agents propose with risk
+   tags (low/medium/high); backend routes accordingly. Low auto-executes,
+   medium queues for approval, high requires explicit approval. Don't
+   gatekeep everything; do gatekeep what matters.
+
+3. **Backend mediates everything** — UI never talks to agents directly;
+   agents never talk to each other directly. Backend authenticates,
+   permission-checks, routes, and enforces governance. This is the air gap
+   that keeps the system honest.
+
+4. **Email is opt-in via UI assignment** — agents never read Gmail on their
+   own. Users see their inbox in the UI; they assign threads to projects; only
+   then does content flow into the system.
+
+## Authentication — own login, NOT Google OAuth
+
+Orrery has its own authentication, independent of Google identity:
+
+- Users sign up / are invited with **email + password**.
+- Passwords stored as **Argon2** hashes (with salts); never plaintext, never
+  logged.
+- Sessions: server-side, stored in Postgres, referenced by a signed session
+  cookie (HttpOnly, Secure, SameSite=Lax). Sliding expiration.
+- Password reset flow: signed time-limited token sent via email.
+- MFA optional later (TOTP); design schema to support it, don't build it yet.
+
+**Why this matters and what it implies:**
+
+- Users are NOT tied to any Google identity. Anyone the admin invites can use
+  Orrery regardless of whether they have a Google account.
+- Each user record holds: id, email, display_name, password_hash, role,
+  project memberships, agent permissions, MFA fields (nullable), timestamps,
+  status (active/disabled).
+- **Gmail OAuth is SEPARATE** and is not used for login. It's a per-user
+  *authorization grant* for the system to access that user's inbox (read) and
+  drafts (write), only after they explicitly connect Gmail in their profile.
+  Users who don't want email features simply don't connect Gmail.
+- Google Workspace integration on the agent side (the engineering agent's
+  Drive access via service account) is unchanged and unrelated to user login.
 
 ## Invariants — enforce these in code, always
-- The agent **never overwrites** an existing Drive document. Drafts are always **new**
-  files created in `engineering/drafts/`. Drive's own permissions enforce this at the
-  API level; the code should not even try.
-- The agent is a **finder, not an oracle**. Any spec, price, or part number from web
-  search must include the source URL and a "verify before relying on this" note. Never
-  assert external technical facts as authoritative.
-- The agent's reasoning tools are **read-only** (Drive read, KB read, web search). The
-  only write capability is creating a new doc in `engineering/drafts/`, kept as a
-  separate code path from the reasoning tools.
-- Config is **read-only to the agent** at runtime. Only the human edits it, via git.
-- Everything the agent learns lands in the KB as `status="provisional"`, tagged with
-  the source document (or URL) and its version/date.
-- **Web search is the agent's ONE outbound capability** beyond the gateway. Egress
-  restricted to the search-provider endpoint(s) only. No general internet browsing.
-  - **Sanctioned exception (added 2026-06-03, user-approved):** a *human-invoked*
-    file download into `engineering/drafts/` is allowed, for saving a web datasheet
-    the agent found. The **agent itself still has no fetch or write tool** — it only
-    *proposes* a URL (the `request_spec_save` tool stages it, does no I/O). The
-    download + store happens in a separate module (`engineering/fetch.py`,
-    `fetch_to_drafts`) only after a human approves (the `eng-save-spec` command, or
-    the y/N prompt in `eng-chat`). This widens egress to arbitrary hosts at that
-    moment; it is bounded by guards (http/https only, SSRF guard rejecting
-    private/loopback hosts, 30 MB cap, 30 s timeout, create-only in `drafts/`). Do
-    not extend this into an agent-callable tool — that would break the invariant.
-- Secrets live in `.env` (gitignored) and reach only the container that needs them.
-  Never hardcode a key. Never commit `.env` or the Google service-account JSON.
 
-## Scope — build ONLY this
-- **LiteLLM gateway** (Docker) → our Anthropic account. All model and embedding calls
-  route through it.
-- **One engineering agent** (~one Python file, PydanticAI) in its own container, via
-  the gateway.
-- **Four tools** in the agent:
-  - Drive search over `engineering/` and subfolders (via the Google Workspace MCP if
-    available, or the Drive API directly with a service account).
-  - KB search and add — Qdrant, with local embeddings (fastembed); pin the embedding
-    model name in metadata.
-  - Web search through **one** controlled tool (Tavily by default — designed for
-    agents); egress restricted to that provider only.
-  - Drive draft creation — creates a new doc in `engineering/drafts/` from a template
-    in `engineering/templates/`. Never modifies existing files.
-- **Behavior config**: `config/engineering/agent.md`, in a local git repo, read at startup.
-- **Approval surface**: post drafts/summaries to Slack with 👍/👎. At this phase, reactions
-  are mainly **feedback** (good output / bad output) rather than a hard safety gate,
-  because engineering drafts are inherently low-risk (the human edits them in Drive
-  anyway). The hard-gating role of the approval queue arrives in Phase 2 with
-  bookkeeping. Build the pattern anyway. Fall back to console output if Slack isn't ready.
+- **The backend, not the UI, enforces permissions.** Every API call checks the
+  authenticated user's access to the requested project/agent/resource. Never
+  trust the UI to gatekeep.
+- **Passwords are Argon2-hashed**, never stored plaintext, never logged.
+  Sessions invalidate on password change.
+- **Agents are HTTP services**; the backend is the only thing that calls them.
+  Agents are stateless from the backend's perspective — conversation state
+  lives in Postgres.
+- **Agent read tools never mutate.** Mutations go through the approval flow
+  or bounded write paths (Drive's `drafts/`, Gmail drafts folder).
+- **Per-user Gmail tokens encrypted at rest** and never logged. Treat email
+  content as the most sensitive data in the system.
+- **Risk classification is honest.** If an action is irreversible or public,
+  it's not low-risk regardless of what the agent claims. Override the agent's
+  classification if needed.
+- **Email content only enters the system at user assignment time** — never
+  via background polling or unsolicited reads.
+- **Secrets live in `.env`** (gitignored) or a secrets file. Never hardcoded,
+  never logged, never committed.
 
-## Drive permissions — the read/write split is enforced by Google, not by code
-The agent uses a Google service account. The human shares folders with it like this:
+## Scope — build ONLY this (for the current build phase)
 
-- `engineering/` and most subfolders → **read-only** share
-- `engineering/templates/` → **read-only** share
-- `engineering/drafts/` → **edit** share (so the agent can create new docs here)
+- **Auth**: email/password registration & login with Argon2, server-side
+  sessions, password reset via email. Per-user records (role, project
+  memberships, agent permissions). Separate Gmail OAuth flow available in user
+  profile (not used for login).
+- **Projects as first-class entities**: Postgres schema, UI for create/list/
+  select, project membership, tasks table (minimal UI; schema ready for the
+  future PM agent).
+- **Conversation flow**: state keyed on (user, agent, project); ask box,
+  response in canvas; structured agent responses (text + artifacts +
+  proposals).
+- **Approval queue**: proposals table, risk-classified routing (low auto,
+  medium queue, high elevated), pending-approvals UI, Slack notifications.
+- **Email**: Gmail inbox view (after user connects Gmail), thread assignment
+  to projects, KB ingestion at assignment time, un-assign action. Outbound
+  drafting via Gmail drafts folder.
+- **Multi-agent foundation**: agent registry, backend routing, agent selector
+  (override) in UI. Engineering agent only for now; design the multi-agent
+  pattern, exercise just one.
+- **Layout**: header banner; left-upper = pending approvals; left-lower =
+  projects + ask box; right = canvas (conversation, artifacts, project view,
+  email view, document preview).
 
-Google enforces this at the API level. The agent literally cannot modify a read-only
-file. The code should still treat "never overwrite" as a rule, not rely on Google
-catching mistakes.
+## Existing engineering agent — what needs to change
 
-## Do NOT build yet — deferred to later phases; leave clean seams, not implementations
-- No second agent. No bookkeeping, corporate, EA, support, marketing, IT-ops, or
-  customer-service yet.
-- No agent-to-agent communication (the EA arrives in Phase 3).
-- No multi-user permissions or role-based access (the founder/CEO/CFO restriction on
-  the EA is a Phase 3+ feature; not now).
-- No structured spec-sheet extraction. The agent surfaces datasheet links; the human
-  reads the PDF for design-relevant numbers.
-- No paid vendor APIs (Octopart, Digi-Key, Mouser). Web search via one provider is enough.
-- No Postgres approval store, no web console — Slack 👍/👎 *is* the approval surface.
-- No separate MCP layer service — a small set of agent-owned tools is fine for one agent.
-- No document repo / git-LFS layer — Drive *is* the document home for now; Drive's
-  native version history is the version control.
-- No trust/decay engine on the KB — just timestamps and source/version tags.
-  Manual curation (deletion) is fine.
+Currently runs as a CLI (`make chat`). Wrap it in an HTTP service:
+- Accept JSON requests with (query, conversation_history, project_context).
+- Run its loop on that request.
+- Return structured response: `{text, artifacts[], proposals[]}`.
+- Be stateless — conversation state lives in the backend, not the agent.
 
-If a task tempts you toward any of the above, **stop and ask** — it is almost certainly
-out of scope for this phase.
+Tools, KB, Drive integration, gateway routing — unchanged. Only the entry
+point changes. CLI mode can stay for local testing alongside HTTP mode.
+
+The agent's relocation to `agents/engineering/` should preserve git history
+where possible (use `git mv` or copy with intent).
+
+## Do NOT build yet — deferred to later phases; leave seams, not implementations
+
+- **No second agent.** Bookkeeping, corporate, EA, project management — later.
+  Registry supports them; only engineering is wired up.
+- **No agent-to-agent execution.** Design the backend-mediated pattern; don't
+  exercise it (the EA needs it, and the EA doesn't exist).
+- **No MFA.** Schema supports it (nullable fields); don't implement.
+- **No SSO.** Stick to email/password.
+- **No deployment automation.** Local docker compose only. Droplet deployment
+  is a later concern; `docker-compose.prod.yml` is a stub for now.
+- **No mobile or desktop app.** Web browser only.
+- **No advanced PM features.** Tasks schema is ready; UI is minimal. Full PM
+  arrives with the PM agent.
+- **No real-time multi-user features.** No presence, no live cursors, no
+  collaborative editing.
+- **No analytics or reporting dashboards.**
+- **No real-time streaming (SSE/WebSockets) yet.** HTTP request/response is
+  enough until it isn't.
+
+If a task tempts you toward any of the above, **stop and ask** — it is almost
+certainly out of scope for this phase.
+
+## Tech stack (default; ask if you'd prefer different)
+
+- **Backend**: Python 3.12 + FastAPI
+- **Frontend**: React + Vite + TypeScript
+- **Database**: PostgreSQL
+- **ORM / migrations**: SQLAlchemy + Alembic
+- **Auth**: Argon2 (via `argon2-cffi`) for password hashing; server-side
+  sessions in Postgres; signed cookies (`itsdangerous` or similar)
+- **Email sending** (for password reset, eventually notifications): Postmark
+  (already in use)
+- **Styling**: Tailwind CSS; component primitives optional (shadcn/ui or bare)
+- **Agent comms**: HTTP from backend to agent containers
+- **Python workspace**: uv with a workspace root `pyproject.toml`
+- **Frontend workspace**: pnpm (or npm) workspaces
+- **Orchestration**: docker compose
 
 ## Conventions
-- Stack: Ubuntu 24.04, Docker + docker compose, Python 3.12, type hints, small focused files.
-- Layout:
-  ```
-  docker-compose.yml             # gateway, qdrant, agent
-  gateway/                       # LiteLLM config
-  agent/                         # loop, tools, kb wrapper, approval surface
-  config/engineering/agent.md    # the agent's behavior (git-tracked)
-  .env                           # secrets (gitignored)
-  service-account.json           # Google credentials (gitignored)
-  ```
-- **Naming:** the agent's behavior file is `config/engineering/agent.md`. *This* file
-  (`CLAUDE.md`) is your instructions as the coding assistant. They are different things —
-  never conflate them.
-- Keep the agent file small and readable; someone who didn't write it should understand it.
+
+- Stack: Ubuntu 24.04, Docker + docker compose, Python 3.12, Node 20+, VS Code.
+- Type hints everywhere on Python; TypeScript strict mode on frontend.
+- Generate TypeScript types from FastAPI's OpenAPI schema; do not maintain
+  parallel type definitions by hand.
+- Small focused files; readable by someone who didn't write them.
+- This file (`CLAUDE.md`) at the repo root is your instructions as the coding
+  assistant. The engineering agent's `config/engineering/agent.md` is the
+  agent's behavior. Different things, different scope.
 
 ## How to work
+
 - Build incrementally; explain choices briefly.
-- **Ask before assuming** any credential or external service: Anthropic key handling,
-  Drive integration approach (Workspace MCP vs. Drive API + service account), web-search
-  provider choice, Slack token presence, the engineering folder structure to set up.
-- Order: **gateway first** — verify a test call routes through it, then **pause for my
-  confirmation** — then agent skeleton + Drive read in console → KB + ingest engineering
-  folder → web search (one provider) → template-based draft creation → Slack 👍/👎.
+- **Ask before assuming** any credential, service detail, or design choice
+  not specified above.
+- Recommended order:
+  1. Reorganize the existing agent into `agents/engineering/`; verify it still
+     runs via its existing CLI and Docker setup. PAUSE.
+  2. Set up the workspace structure (root pyproject.toml, shared `agents/lib/`,
+     `web/backend/` skeleton). PAUSE.
+  3. Backend skeleton + Postgres + email/password auth (register, login,
+     session, password reset). Minimal frontend just to confirm login works.
+     PAUSE.
+  4. Wrap the engineering agent in an HTTP service. Backend can send a query
+     and get a response (verified via curl). PAUSE.
+  5. Frontend skeleton + conversation flow. Layout (header, left/right split,
+     ask box, canvas). Single agent, no project context yet. PAUSE.
+  6. Projects schema + UI. Conversation state keyed on (user, agent, project).
+     PAUSE.
+  7. Approval queue + risk classification. Slack notifications. PAUSE.
+  8. Per-user Gmail OAuth (connect-in-profile flow) + inbox view. No
+     assignment yet. PAUSE.
+  9. Email assignment flow (KB ingestion on assign, un-assign action). PAUSE.
+  10. Outbound email drafting via Gmail drafts. PAUSE.
+  11. Structured artifacts in the canvas (tables, document previews). DONE.
+- **Pause after each step** for me to verify. Don't run ahead.
 - When unsure whether something is in scope, prefer the smaller option and ask.
 
 ## Definition of done (this phase)
-The engineering agent can answer "find me X in our docs" with citations, "research vendor
-options for Y" with cited links and verify-the-source notes, and "draft a [template] for
-[purpose]" creating a new Drive doc in `drafts/`. The KB accumulates provisional, source-
-tagged facts. Then we judge: **did it actually help my engineering work?** No scope
-expansion until that question is answered.
+
+A signed-in user can:
+- Register, log in, reset their password (no Google account required).
+- See and manage their projects.
+- Have a project-scoped conversation with the engineering agent.
+- See pending approvals and resolve them.
+- Optionally connect their Gmail in their profile; see their inbox in the UI;
+  assign threads to projects; the agent answers about assigned email content.
+- Ask the agent to draft an outbound email; the draft appears in their Gmail
+  drafts folder.
+- Use a "global" context (no project) where queries go to engineering
+  (placeholder for the future EA agent).
+
+The whole thing runs in `docker compose up` from `infra/` locally.
+Deployment to the DigitalOcean Droplet is a later step, not part of this phase.

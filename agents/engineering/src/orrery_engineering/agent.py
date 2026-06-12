@@ -19,22 +19,17 @@ it tells the user honestly instead of inventing an answer.
 """
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.messages import ModelResponse, TextPart
-from pydantic_ai.models.openai import OpenAIModel
-from pydantic_ai.providers.openai import OpenAIProvider
 
-from ..config import ENGINEERING_CONFIG_PATH, load_instructions
-from ..tools import kb
-from . import NotConfiguredError
+from orrery_lib import NotConfiguredError, kb
+from orrery_lib.gateway import build_model
+
+from .config import ENGINEERING_CONFIG_PATH, load_instructions
 from .drive import DriveReader, build_drive_reader
 from . import websearch
-
-GATEWAY_URL = os.environ.get("ORRERY_GATEWAY_URL", "http://gateway:4000/v1")
-MODEL_NAME = os.environ.get("ORRERY_MODEL", "claude-sonnet")
 
 
 @dataclass
@@ -54,17 +49,8 @@ class EngineeringDeps:
 
 def build_agent() -> Agent[EngineeringDeps, str]:
     """Construct the engineering agent. Side effect: reads agent.md."""
-    model = OpenAIModel(
-        MODEL_NAME,
-        provider=OpenAIProvider(
-            base_url=GATEWAY_URL,
-            # LiteLLM is unauthenticated in Phase 0 dev; the OpenAI
-            # client still requires a non-empty string here.
-            api_key="orrery-no-auth",
-        ),
-    )
     agent = Agent[EngineeringDeps, str](
-        model,
+        build_model(),
         instructions=load_instructions(ENGINEERING_CONFIG_PATH),
         deps_type=EngineeringDeps,
     )

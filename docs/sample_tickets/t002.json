@@ -1,7 +1,0 @@
-{
-  "id": "t002",
-  "subject": "Can't connect new sensor to Wi-Fi during setup",
-  "from": "mike.tran@example.com",
-  "received_at": "2026-05-28T09:14:00Z",
-  "body": "Just got a new VestaGuard for my basement furnace. The app sees the device in setup mode (blinking blue) but when I enter my Wi-Fi password it fails after about 30 seconds with 'Could not join network'.\n\nMy network is 'Tran-5G' and the password works on my phone. Router is an Eero 6.\n\nWhat am I doing wrong?\n\n-Mike"
-}

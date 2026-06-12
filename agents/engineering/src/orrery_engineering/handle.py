@@ -21,8 +21,8 @@ from __future__ import annotations
 import sys
 from datetime import datetime, timezone
 
-from .. import actions
-from ..approval import Decision, build_approval_surface
+from . import actions
+from .approval import Decision, build_approval_surface
 from .agent import draft_document
 from .draft import DriveDraftCreator
 

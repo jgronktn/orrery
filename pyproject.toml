@@ -1,0 +1,6 @@
+# uv workspace root for the Orrery monorepo. Members are the individual
+# agents and the shared library; the web backend joins this list later.
+# (Docker images build each agent independently from its own pyproject;
+# this root is for local `uv` development across the workspace.)
+[tool.uv.workspace]
+members = ["agents/engineering", "agents/lib"]

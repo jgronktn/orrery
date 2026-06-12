@@ -1,62 +1,45 @@
-"""Drive access — READ-ONLY reasoning side.
+"""Drive access for the engineering agent — READ-ONLY reasoning side.
 
 INVARIANT (CLAUDE.md): the agent's reasoning tools are read-only. This
 module exposes ONLY search + read, and builds its Google credential with
 the read-only scope. The single write capability — creating a new doc in
-engineering/drafts/ — lives in the separate `draft.py` module (which
-builds its own write-scoped credential and which the agent's reasoning
-loop never imports). Do not add a write method here.
+engineering/drafts/ — lives in the separate `draft.py` module (which the
+agent's reasoning loop never imports). Do not add a write method here.
 
-The read/write split is ultimately enforced by Google: the service
-account is shared Viewer on engineering/ and Editor only on
-engineering/drafts/. The code mirrors that intent (read-only scope here)
-but does not rely on it alone.
+The generic service-account plumbing (auth, scopes, doc→text) lives in
+`orrery_lib.drive`; this module is the engineering-specific reader on top
+of it, scoped to the engineering Shared Drive.
 
 Scope of search: the service account can only see what was shared with
 it — the engineering/ tree — so a full-text search across everything it
-can access IS a search of engineering/. ENGINEERING_FOLDER_ID is used
-only as a configuration sanity signal, not to gate visibility.
+can access IS a search of engineering/. ENGINEERING_FOLDER_ID is the
+Shared Drive id, needed to query the drive corpus.
 """
 from __future__ import annotations
 
 import io
 import os
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Protocol
 
-from . import NotConfiguredError
-
-# Path to the mounted service-account key (read-only bind mount).
-SERVICE_ACCOUNT_PATH = Path(
-    os.environ.get("ORRERY_GOOGLE_SA_JSON", "/app/secrets/service-account.json")
+from orrery_lib import NotConfiguredError
+from orrery_lib.drive import (
+    DOCX_MIME,
+    EXPORT_AS_TEXT,
+    READONLY_SCOPES,
+    SERVICE_ACCOUNT_PATH,
+    build_service,
+    docx_to_text,
 )
 
-# The engineering/ folder id — optional, used for setup sanity only.
+# The engineering Shared Drive id (corpora='drive' queries need it).
 ENGINEERING_FOLDER_ID = os.environ.get("ORRERY_ENG_DRIVE_FOLDER_ID", "")
-
-# Read-only scope. The write path (draft.py) uses a different scope.
-READONLY_SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
-
-# Google-native mime types we can export to text.
-_EXPORT_AS_TEXT = {
-    "application/vnd.google-apps.document": "text/plain",
-    "application/vnd.google-apps.spreadsheet": "text/csv",
-    "application/vnd.google-apps.presentation": "text/plain",
-}
-
-# Uploaded Word docs (e.g. templates) — downloaded as bytes and parsed
-# to text with python-docx. PDFs are deliberately NOT extracted (per
-# CLAUDE.md: the agent surfaces datasheet links, the human reads them).
-_DOCX_MIME = (
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-)
 
 _SETUP_HINT = (
     "Drive access is not configured yet. Save the service-account JSON to "
-    "the repo root as service-account.json (gitignored), uncomment its "
-    "bind mount in docker-compose.yml, and share engineering/ (Viewer) "
-    "with the service-account email."
+    "the repo root as service-account.json (gitignored), mount it in "
+    "docker-compose.yml, and share engineering/ (Viewer) with the "
+    "service-account email."
 )
 
 
@@ -89,39 +72,11 @@ class NullDriveReader:
         raise NotConfiguredError(_SETUP_HINT)
 
 
-def _docx_to_text(data: bytes) -> str:
-    """Extract plain text from a .docx byte blob (paragraphs + tables).
-    python-docx is imported lazily so the package loads without it."""
-    import docx  # python-docx
-
-    document = docx.Document(io.BytesIO(data))
-    lines = [p.text for p in document.paragraphs]
-    for table in document.tables:
-        for row in table.rows:
-            cells = [c.text.strip() for c in row.cells]
-            if any(cells):
-                lines.append(" | ".join(cells))
-    return "\n".join(lines).strip()
-
-
-def _build_service(scopes: list[str]):
-    """Construct a Drive v3 service from the mounted key. Imported
-    lazily so the package imports fine without the Google client dep."""
-    from google.oauth2 import service_account
-    from googleapiclient.discovery import build
-
-    creds = service_account.Credentials.from_service_account_file(
-        str(SERVICE_ACCOUNT_PATH), scopes=scopes
-    )
-    # cache_discovery=False avoids a noisy warning + filesystem write.
-    return build("drive", "v3", credentials=creds, cache_discovery=False)
-
-
 class ServiceAccountDriveReader:
     """Read-only Drive access via the engineering service account."""
 
     def __init__(self):
-        self._service = _build_service(READONLY_SCOPES)
+        self._service = build_service(READONLY_SCOPES)
 
     def search(self, query: str, k: int = 5) -> list[DriveHit]:
         # Escape single quotes for the Drive query language.
@@ -151,9 +106,10 @@ class ServiceAccountDriveReader:
         ]
 
     def read(self, file_id: str) -> str:
-        """Return text for Google-native docs; for binaries (PDFs etc.)
-        return a pointer to the link rather than raw bytes — per scope,
-        the human reads datasheets/PDFs, the agent surfaces the link."""
+        """Return text for Google-native docs and uploaded .docx; for
+        binaries (PDFs etc.) return a pointer to the link rather than raw
+        bytes — the human reads datasheets/PDFs, the agent surfaces the
+        link."""
         from googleapiclient.http import MediaIoBaseDownload
 
         meta = (
@@ -165,7 +121,7 @@ class ServiceAccountDriveReader:
         mime = meta.get("mimeType", "")
 
         # Uploaded Word doc → download bytes, extract text.
-        if mime == _DOCX_MIME:
+        if mime == DOCX_MIME:
             buf = io.BytesIO()
             request = self._service.files().get_media(
                 fileId=file_id, supportsAllDrives=True
@@ -174,10 +130,10 @@ class ServiceAccountDriveReader:
             done = False
             while not done:
                 _, done = downloader.next_chunk()
-            return _docx_to_text(buf.getvalue())
+            return docx_to_text(buf.getvalue())
 
         # Google-native doc → export to text/csv.
-        export_mime = _EXPORT_AS_TEXT.get(mime)
+        export_mime = EXPORT_AS_TEXT.get(mime)
         if export_mime is None:
             link = meta.get("webViewLink", "")
             return (

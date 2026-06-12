@@ -1,6 +1,6 @@
-"""CLI subcommands beyond `draft` — knowledge-base management.
+"""CLI subcommands — knowledge-base management.
 
-Invoked via the same `python -m orrery_agent` entry point and reached
+Invoked via the `python -m orrery_engineering` entry point and reached
 from the host via `make` targets (index-docs, kb-search, kb-list,
 kb-delete). All operations are local to this container's view of
 Qdrant.
@@ -11,7 +11,7 @@ import argparse
 import os
 from pathlib import Path
 
-from .tools import kb
+from orrery_lib import kb
 
 DOCS_ROOT = Path(os.environ.get("ORRERY_DOCS_ROOT", "/app/docs"))
 

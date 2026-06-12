@@ -31,9 +31,10 @@ from urllib.parse import unquote, urlparse
 
 import httpx
 
-from . import NotConfiguredError
-from .draft import DRAFTS_FOLDER_ID, WRITE_SCOPES, CreatedDraft
-from .drive import SERVICE_ACCOUNT_PATH
+from orrery_lib import NotConfiguredError
+from orrery_lib.drive import SERVICE_ACCOUNT_PATH, WRITE_SCOPES, build_service
+
+from .draft import DRAFTS_FOLDER_ID, CreatedDraft
 
 MAX_BYTES = 30 * 1024 * 1024  # 30 MB
 TIMEOUT_S = 30.0
@@ -127,9 +128,7 @@ def fetch_to_drafts(url: str, name: str | None = None) -> CreatedDraft:
 
     from googleapiclient.http import MediaInMemoryUpload
 
-    from .drive import _build_service
-
-    service = _build_service(WRITE_SCOPES)
+    service = build_service(WRITE_SCOPES)
     media = MediaInMemoryUpload(data, mimetype=content_type, resumable=False)
     created = (
         service.files()

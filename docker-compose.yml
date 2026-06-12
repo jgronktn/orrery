@@ -66,14 +66,16 @@ services:
       start_period: 10s
 
   # ─────────────────────────────────────────────────────────────────────
-  # The support agent. CLI-style: not started by `compose up`, run via
-  # `make draft TICKET=t001` which uses `docker compose run --rm agent ...`.
-  # Source code is mounted from ./agent/src so editing is hot-reload —
-  # only pyproject.toml changes require `make build-agent`.
+  # The engineering agent. CLI-style: not started by `compose up`, run via
+  # `make chat` / `make ask Q="..."` which use `docker compose run --rm
+  # agent ...`. Source is mounted from ./agents/engineering/src so editing
+  # is hot-reload — only dependency changes (pyproject.toml) require
+  # `make build-agent`.
   # ─────────────────────────────────────────────────────────────────────
   agent:
     build:
-      context: ./agent
+      context: ./agents
+      dockerfile: engineering/Dockerfile
     container_name: orrery-agent
     env_file:
       - .env
@@ -83,24 +85,18 @@ services:
       # gateway-side at 4000 directly.
       ORRERY_GATEWAY_URL: "http://gateway:4000/v1"
       ORRERY_MODEL: "claude-sonnet"
-      ORRERY_TICKETS_DIR: "/app/docs/sample_tickets"
       ORRERY_QDRANT_URL: "http://qdrant:6333"
       ORRERY_EMBED_MODEL: "BAAI/bge-small-en-v1.5"
-      # ── Engineering agent (Drive + Exa) ──────────────────────────
-      # Path the service-account key is mounted to (see commented mount
-      # below). Drive read/draft stay in the not-configured seam until
-      # this file exists AND the folder ids are set.
+      # ── Drive (service account) ──────────────────────────────────
       ORRERY_GOOGLE_SA_JSON: "/app/secrets/service-account.json"
-      # Drive folder ids — fill these in once the engineering/ tree is
-      # created and shared with the service account. EXA_API_KEY comes
-      # from .env via env_file.
+      # Drive folder ids; EXA_API_KEY comes from .env via env_file.
       ORRERY_ENG_DRIVE_FOLDER_ID: "${ORRERY_ENG_DRIVE_FOLDER_ID:-}"
       ORRERY_ENG_DRAFTS_FOLDER_ID: "${ORRERY_ENG_DRAFTS_FOLDER_ID:-}"
     volumes:
       # Source / config / docs: read-only so the container can't
       # write back into the repo. Behavior and knowledge stay
       # human-authored.
-      - ./agent/src:/app/src:ro
+      - ./agents/engineering/src:/app/engineering/src:ro
       - ./config:/app/config:ro
       - ./docs:/app/docs:ro
       # Google service-account key, read-only. Reaches only this
@@ -109,10 +105,7 @@ services:
       # Cache fastembed model downloads across container runs so we
       # don't re-pull the ~30 MB model on every invocation.
       - fastembed-cache:/root/.cache/fastembed
-      # Write-able mounts — Step 4. sent_replies/ holds approved
-      # drafts that "went out" (Phase 0 stub); logs/ holds the
-      # append-only actions.jsonl audit trail.
-      - ./sent_replies:/app/sent_replies
+      # Append-only actions.jsonl audit trail.
       - ./logs:/app/logs
     depends_on:
       gateway:

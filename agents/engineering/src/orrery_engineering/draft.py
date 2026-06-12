@@ -30,8 +30,8 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
-from . import NotConfiguredError
-from .drive import SERVICE_ACCOUNT_PATH
+from orrery_lib import NotConfiguredError
+from orrery_lib.drive import SERVICE_ACCOUNT_PATH, WRITE_SCOPES, build_service
 
 
 def _markdown_to_html(body: str) -> str:
@@ -53,9 +53,6 @@ def _markdown_to_html(body: str) -> str:
 
 # Drive folder id for engineering/drafts/ — the only place writes land.
 DRAFTS_FOLDER_ID = os.environ.get("ORRERY_ENG_DRAFTS_FOLDER_ID", "")
-
-# Write scope; folder ACLs (Editor on drafts/ only) are the boundary.
-WRITE_SCOPES = ["https://www.googleapis.com/auth/drive"]
 
 _SETUP_HINT = (
     "Draft creation is not configured yet. It needs the service-account "
@@ -88,10 +85,7 @@ class DriveDraftCreator:
 
         from googleapiclient.http import MediaInMemoryUpload
 
-        # Reuse the reader's service builder, but with a write scope.
-        from .drive import _build_service
-
-        service = _build_service(WRITE_SCOPES)
+        service = build_service(WRITE_SCOPES)
         html = _markdown_to_html(body)
         media = MediaInMemoryUpload(
             html.encode("utf-8"), mimetype="text/html", resumable=False
