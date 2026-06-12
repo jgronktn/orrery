@@ -29,7 +29,7 @@ from orrery_lib.schema import (
 )
 
 from .agent import EngineeringDeps, _join_text, build_agent
-from .drive import build_drive_reader
+from orrery_lib.filestore import build_engineering_reader
 from .fetch import fetch_to_drafts
 
 
@@ -47,7 +47,7 @@ def _to_message_history(turns: list[ConversationTurn]):
 async def run_once(req: AgentRequest) -> AgentResponse:
     """Answer one query. Read-only reasoning; any write the agent wants
     surfaces as a Proposal for the backend to approve."""
-    deps = EngineeringDeps(drive=build_drive_reader())
+    deps = EngineeringDeps(files=build_engineering_reader())
     agent = build_agent()
     history = _to_message_history(req.conversation_history)
 

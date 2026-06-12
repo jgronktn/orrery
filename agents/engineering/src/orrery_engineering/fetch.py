@@ -3,19 +3,19 @@
 This is a WRITE + EGRESS path, deliberately kept OUT of the agent's
 reasoning loop. The agent never imports this module and has no tool that
 calls it. The agent can only FIND and PROPOSE a datasheet URL (via its
-existing web search); a human runs `eng-save-spec --url ...` to actually
-fetch and store it. So:
+existing web search); the download + store happens here after approval. So:
 
   - The agent has no write tool        → read-only-reasoning invariant holds.
   - The agent has no direct net fetch  → it never touches the external URL.
-  - A human triggers every download    → governed-autonomy holds.
+  - A human (or the approval flow) triggers every download.
 
 DELIBERATE OVERRIDE (logged for reviewers): downloading from an arbitrary
 vendor URL is outbound egress beyond the Exa search endpoint, which
-CLAUDE.md's egress invariant otherwise forbids ("egress restricted to the
-search provider only"). This is an explicit, human-invoked exception, and
-the egress lives HERE, never in the agent. Guards below limit the blast
-radius; they do not make arbitrary fetch risk-free.
+CLAUDE.md's egress invariant otherwise forbids. This is an explicit,
+human-invoked exception, and the egress lives HERE, never in the agent.
+
+The downloaded bytes are written to the local file store (engineering/
+drafts/) and git-committed for versioning — no Drive API.
 
 Guards: http/https only; refuse private/loopback/link-local hosts (basic
 SSRF guard on the initial host); 30 MB size cap; 30 s timeout. Files are
@@ -31,10 +31,9 @@ from urllib.parse import unquote, urlparse
 
 import httpx
 
-from orrery_lib import NotConfiguredError
-from orrery_lib.drive import SERVICE_ACCOUNT_PATH, WRITE_SCOPES, build_service
+from orrery_lib import filestore
 
-from .draft import DRAFTS_FOLDER_ID, CreatedDraft
+from .draft import DRAFTS_DIR, CreatedDraft
 
 MAX_BYTES = 30 * 1024 * 1024  # 30 MB
 TIMEOUT_S = 30.0
@@ -49,13 +48,6 @@ _EXT_BY_TYPE = {
     "text/plain": ".txt",
     "text/html": ".html",
 }
-
-_SETUP_HINT = (
-    "Spec fetch is not configured yet. It needs the service-account key "
-    f"({SERVICE_ACCOUNT_PATH}), Editor share on engineering/drafts/, and "
-    "ORRERY_ENG_DRAFTS_FOLDER_ID set to that folder's id."
-)
-
 
 def _guard_url(url: str) -> None:
     """Allow only http/https to public hosts. Basic SSRF guard."""
@@ -97,10 +89,8 @@ def _derive_name(url: str, name: str | None, content_type: str) -> str:
 
 
 def fetch_to_drafts(url: str, name: str | None = None) -> CreatedDraft:
-    """Download `url` and store it as a NEW file in engineering/drafts/.
-    Returns the created draft handle. Create-only; never overwrites."""
-    if not (SERVICE_ACCOUNT_PATH.exists() and DRAFTS_FOLDER_ID):
-        raise NotConfiguredError(_SETUP_HINT)
+    """Download `url` and store it as a NEW file in engineering/drafts/
+    on the local file store (git-committed). Create-only; never overwrites."""
     _guard_url(url)
 
     headers = {"User-Agent": "orrery-engineering-agent/0.1"}
@@ -125,23 +115,10 @@ def fetch_to_drafts(url: str, name: str | None = None) -> CreatedDraft:
             data = bytes(buf)
 
     filename = _derive_name(url, name, content_type)
-
-    from googleapiclient.http import MediaInMemoryUpload
-
-    service = build_service(WRITE_SCOPES)
-    media = MediaInMemoryUpload(data, mimetype=content_type, resumable=False)
-    created = (
-        service.files()
-        .create(
-            body={"name": filename, "parents": [DRAFTS_FOLDER_ID]},
-            media_body=media,
-            fields="id, name, webViewLink",
-            supportsAllDrives=True,
-        )
-        .execute()
+    hit = filestore.save_bytes(
+        DRAFTS_DIR,
+        filename,
+        data,
+        message=f"engineering: saved {filename} from {url}",
     )
-    return CreatedDraft(
-        file_id=created["id"],
-        name=created.get("name", filename),
-        web_view_link=created.get("webViewLink", ""),
-    )
+    return CreatedDraft(file_id=hit.path, name=hit.name, web_view_link=hit.path)

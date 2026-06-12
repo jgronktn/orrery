@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 from . import actions
 from .approval import Decision, build_approval_surface
 from .agent import draft_document
-from .draft import DriveDraftCreator
+from .draft import DraftCreator
 
 
 def _draft_name(template_name: str, purpose: str) -> str:
@@ -46,7 +46,7 @@ async def handle_draft(
 
     # 2. Create the NEW doc in drafts/ (separate write path).
     name = _draft_name(template_name, purpose)
-    creator = DriveDraftCreator()
+    creator = DraftCreator()
     created = creator.create(name=name, body=body)
     actions.log(
         "eng_draft_created",

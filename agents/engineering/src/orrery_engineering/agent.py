@@ -25,25 +25,25 @@ from pydantic_ai import Agent, RunContext
 from pydantic_ai.messages import ModelResponse, TextPart
 
 from orrery_lib import NotConfiguredError, kb
+from orrery_lib.filestore import FileStoreReader, build_engineering_reader
 from orrery_lib.gateway import build_model
 
 from .config import ENGINEERING_CONFIG_PATH, load_instructions
-from .drive import DriveReader, build_drive_reader
 from . import websearch
 
 
 @dataclass
 class EngineeringDeps:
-    """Per-run dependencies. The Drive reader is read-only; the write
+    """Per-run dependencies. The file reader is read-only; the write
     path is deliberately absent from deps so the agent can't reach it.
 
     `pending_saves` is a PROPOSAL queue, not a write capability: the
     request_spec_save tool only appends a {url, filename} dict here. No
-    download or Drive write happens in the agent — a separate driver
+    download or file write happens in the agent — a separate driver
     (chat.py) reads this queue, asks the human to approve, and only then
     invokes the separate fetch module. Empty for one-shot ask/draft."""
 
-    drive: DriveReader
+    files: FileStoreReader
     pending_saves: list[dict] = field(default_factory=list)
 
 
@@ -58,51 +58,39 @@ def build_agent() -> Agent[EngineeringDeps, str]:
     # ── Inward: the company's own documents ────────────────────────
 
     @agent.tool
-    async def search_drive(
+    async def search_files(
         ctx: RunContext[EngineeringDeps], query: str, k: int = 5
     ) -> list[dict] | str:
-        """Search the company's engineering documents in Google Drive
-        (specs, SOWs, design docs, testing checklists, certifications)
-        by keyword. Use this FIRST for any question about what the
-        company has documented. Returns up to k hits, each with the
-        document name, a link, and a snippet. Read-only — cannot modify
-        any Drive file.
+        """Search the company's engineering documents (specs, SOWs,
+        design docs, testing checklists, certifications, templates) on
+        the file server by keyword — matches both filenames and the text
+        content of Markdown/text/Word files (PDFs match by filename
+        only). Use this FIRST for any question about what the company has
+        documented. Returns up to k hits, each with the file's `path`,
+        name, and a snippet. Read-only.
         """
         try:
-            hits = ctx.deps.drive.search(query, k=k)
-        except NotConfiguredError as exc:
-            return (
-                "DRIVE SEARCH UNAVAILABLE — not configured in this build. "
-                "Do not claim to have searched Drive. Tell the user Drive "
-                f"access isn't wired up yet.\n\n{exc}"
-            )
-        return [
-            {
-                "file_id": h.file_id,
-                "name": h.name,
-                "link": h.web_view_link,
-                "snippet": h.snippet,
-            }
-            for h in hits
-        ]
+            hits = ctx.deps.files.search(query, k=k)
+        except Exception as exc:  # pragma: no cover - surfaced to the model
+            return f"FILE SEARCH ERROR: {exc}"
+        return [{"path": h.path, "name": h.name, "snippet": h.snippet} for h in hits]
 
     @agent.tool
-    async def read_drive(
-        ctx: RunContext[EngineeringDeps], file_id: str
+    async def read_file(
+        ctx: RunContext[EngineeringDeps], path: str
     ) -> str:
-        """Read the text of a Drive document by its file_id (get the id
-        from search_drive results). Returns the document's text for
-        Google Docs and Word (.docx) files. For PDFs and other binaries
-        it returns a pointer to the file's link instead of its contents
-        — open those directly; do not guess their contents. Read-only.
+        """Read an engineering document by its `path` (from search_files
+        results, e.g. 'specs/spec-relay-5A.pdf'). Returns the text for
+        Markdown/text/Word files. For PDFs and other binaries it returns
+        the file's location to open directly — do not guess their
+        contents. Read-only.
         """
         try:
-            return ctx.deps.drive.read(file_id)
-        except NotConfiguredError as exc:
-            return (
-                "DRIVE READ UNAVAILABLE — not configured in this build. "
-                f"Tell the user Drive access isn't wired up yet.\n\n{exc}"
-            )
+            return ctx.deps.files.read(path)
+        except FileNotFoundError:
+            return f"No file found at '{path}'. Use search_files to find the right path."
+        except Exception as exc:  # pragma: no cover
+            return f"FILE READ ERROR: {exc}"
 
     @agent.tool
     async def search_docs(
@@ -266,7 +254,7 @@ def _longest_text(result) -> str:
 
 async def ask(question: str) -> str:
     """Driver: answer one engineering question. Read-only end to end."""
-    deps = EngineeringDeps(drive=build_drive_reader())
+    deps = EngineeringDeps(files=build_engineering_reader())
     agent = build_agent()
     result = await agent.run(question, deps=deps)
     return _full_answer(result)
@@ -282,7 +270,7 @@ async def draft_document(template_name: str, purpose: str) -> str:
     this text to the separate write module. That preserves the
     governance split: the reasoning loop drafts, a separate path writes.
     """
-    deps = EngineeringDeps(drive=build_drive_reader())
+    deps = EngineeringDeps(files=build_engineering_reader())
     agent = build_agent()
     prompt = (
         f"Draft a new '{template_name}' document for this purpose:\n"

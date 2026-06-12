@@ -11,6 +11,10 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# git: the agent versions document writes by committing to the file store.
+RUN apt-get update && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
+
 # Shared library first — the engineering agent's `orrery-lib[agent]`
 # dependency (the [agent] extra pulls the heavy deps: pydantic-ai, qdrant,
 # fastembed, google-api, python-docx).

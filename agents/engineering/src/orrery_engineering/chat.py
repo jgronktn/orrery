@@ -20,7 +20,7 @@ import asyncio
 
 from . import actions
 from .agent import EngineeringDeps, _join_text, build_agent
-from .drive import build_drive_reader
+from orrery_lib.filestore import build_engineering_reader
 from .fetch import fetch_to_drafts
 
 
@@ -60,7 +60,7 @@ async def _process_pending_saves(deps: EngineeringDeps, loop) -> None:
 
 
 async def chat() -> None:
-    deps = EngineeringDeps(drive=build_drive_reader())
+    deps = EngineeringDeps(files=build_engineering_reader())
     agent = build_agent()
     history: list = []
     loop = asyncio.get_event_loop()
