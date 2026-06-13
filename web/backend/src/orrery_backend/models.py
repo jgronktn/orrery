@@ -8,11 +8,12 @@ proposals, and Gmail tokens arrive in later steps.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import (
     JSON,
     Boolean,
+    Date,
     DateTime,
     ForeignKey,
     String,
@@ -93,6 +94,7 @@ class Project(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(SAUuid, primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(200))
+    slug: Mapped[str] = mapped_column(String(220), unique=True, index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -138,13 +140,21 @@ class Task(Base):
         ForeignKey("projects.id", ondelete="CASCADE"), index=True
     )
     title: Mapped[str] = mapped_column(String(300))
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="todo")
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+    due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
 
     project: Mapped[Project] = relationship(back_populates="tasks")
+    documents: Mapped[list["TaskDocument"]] = relationship(
+        back_populates="task", cascade="all, delete-orphan"
+    )
 
 
 class Conversation(Base):
@@ -230,3 +240,66 @@ class ProposalRecord(Base):
     decided_by: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id"), nullable=True
     )
+
+
+# ── Cross-functional projects: agents engaged + per-member-per-agent perms ──
+
+
+class ProjectAgent(Base):
+    """An agent engaged on a project (a project is cross-functional).
+    Today every project has 'engineering'; future agents add rows here."""
+
+    __tablename__ = "project_agents"
+    __table_args__ = (UniqueConstraint("project_id", "agent_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(SAUuid, primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
+    agent_id: Mapped[str] = mapped_column(String(50))
+    role: Mapped[str] = mapped_column(String(50), default="primary")  # free text
+    added_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    added_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+
+
+class ProjectMemberAgent(Base):
+    """Per-user, per-project, per-agent permissions. can_talk = may query
+    this agent in this project; can_approve = may resolve its proposals."""
+
+    __tablename__ = "project_member_agents"
+    __table_args__ = (UniqueConstraint("project_id", "user_id", "agent_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(SAUuid, primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    agent_id: Mapped[str] = mapped_column(String(50))
+    can_talk: Mapped[bool] = mapped_column(Boolean, default=True)
+    can_approve: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class TaskDocument(Base):
+    """A document reference attached to a task (link_task_to_doc)."""
+
+    __tablename__ = "task_documents"
+
+    id: Mapped[uuid.UUID] = mapped_column(SAUuid, primary_key=True, default=uuid.uuid4)
+    task_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("tasks.id", ondelete="CASCADE"), index=True
+    )
+    doc_path: Mapped[str] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    task: Mapped["Task"] = relationship(back_populates="documents")

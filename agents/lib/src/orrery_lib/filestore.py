@@ -153,14 +153,24 @@ def read(root: Path, relpath: str) -> str:
 # ── writes (with git versioning) ────────────────────────────────────
 
 
-def git_commit(rel_paths: list[str], message: str) -> None:
-    """Stage paths and commit in the FILES_ROOT repo as the agent."""
+def git_commit(
+    rel_paths: list[str],
+    message: str,
+    *,
+    author_name: str | None = None,
+    author_email: str | None = None,
+) -> None:
+    """Stage paths and commit in the FILES_ROOT repo. Defaults to the agent
+    identity; pass author_name/email to attribute a user- or system-initiated
+    write."""
+    name = author_name or GIT_AUTHOR_NAME
+    email = author_email or GIT_AUTHOR_EMAIL
     env = {
         **os.environ,
-        "GIT_AUTHOR_NAME": GIT_AUTHOR_NAME,
-        "GIT_AUTHOR_EMAIL": GIT_AUTHOR_EMAIL,
-        "GIT_COMMITTER_NAME": GIT_AUTHOR_NAME,
-        "GIT_COMMITTER_EMAIL": GIT_AUTHOR_EMAIL,
+        "GIT_AUTHOR_NAME": name,
+        "GIT_AUTHOR_EMAIL": email,
+        "GIT_COMMITTER_NAME": name,
+        "GIT_COMMITTER_EMAIL": email,
     }
     base = ["git", "-C", str(FILES_ROOT)]
     subprocess.run([*base, "add", *rel_paths], check=True, env=env, capture_output=True)

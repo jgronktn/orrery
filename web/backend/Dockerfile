@@ -4,6 +4,10 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# git: the backend commits project-folder/research-log writes to the file store.
+RUN apt-get update && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
+
 # Shared library (core/light — just the schema + errors, no agent deps).
 COPY agents/lib ./lib
 RUN pip install --no-cache-dir ./lib

@@ -6,6 +6,7 @@ membership are a later concern.
 """
 from __future__ import annotations
 
+import re
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -14,10 +15,31 @@ from sqlalchemy.orm import Session as DbSession
 
 from .auth import current_user
 from .db import get_db
-from .models import Project, ProjectMember, Task, User
+from .models import (
+    Project,
+    ProjectAgent,
+    ProjectMember,
+    ProjectMemberAgent,
+    Task,
+    User,
+)
+from .projectstore import create_project_tree
 from .schemas import ProjectIn, ProjectOut, TaskIn, TaskOut
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
+
+
+def _slugify(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "project"
+
+
+def unique_slug(db: DbSession, name: str) -> str:
+    """A filesystem-safe, unique project slug derived from the name."""
+    base = _slugify(name)
+    slug, i = base, 1
+    while db.scalar(select(Project.id).where(Project.slug == slug)) is not None:
+        slug, i = f"{base}-{i}", i + 1
+    return slug
 
 
 def require_membership(
@@ -45,12 +67,35 @@ def _to_out(project: Project, role: str) -> ProjectOut:
 def create_project(
     body: ProjectIn, user: User = Depends(current_user), db: DbSession = Depends(get_db)
 ) -> ProjectOut:
-    project = Project(name=body.name, description=body.description, created_by=user.id)
+    slug = unique_slug(db, body.name)
+    project = Project(
+        name=body.name,
+        slug=slug,
+        description=body.description,
+        created_by=user.id,
+    )
     db.add(project)
     db.flush()  # assign project.id
     db.add(ProjectMember(project_id=project.id, user_id=user.id, role="owner"))
+    # A project is cross-functional; engineering is the (only) agent today.
+    db.add(
+        ProjectAgent(
+            project_id=project.id, agent_id="engineering", role="primary",
+            added_by=user.id,
+        )
+    )
+    db.add(
+        ProjectMemberAgent(
+            project_id=project.id, user_id=user.id, agent_id="engineering",
+            can_talk=True, can_approve=True,
+        )
+    )
     db.commit()
     db.refresh(project)
+    # Filesystem: create the project's folder tree + seeded research log.
+    create_project_tree(
+        slug, project.name, author_name=user.display_name, author_email=user.email
+    )
     return _to_out(project, "owner")
 
 
