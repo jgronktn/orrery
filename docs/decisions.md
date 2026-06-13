@@ -343,67 +343,150 @@ Would reconsider when: we want a vendor-domain egress allowlist, or to
 move the download behind the hard approval queue that arrives with
 bookkeeping (Phase 2).
 
+## 2026-06-12 — Pivot to a web application; DELETE the support agent
+
+CLAUDE.md was rewritten from "CLI engineering agent" to a **monorepo web
+app**: function agents as HTTP services behind a FastAPI backend + React
+UI, with its own auth, cross-functional projects, an approval queue, and
+email. The stale tech-SUPPORT agent (from an early session) was DELETED
+in the restructure — reversing the earlier "keep both agents alongside"
+call, which is now obsolete.
+
+Would reconsider when: never by default — support is gone on purpose.
+
+## 2026-06-12 — Monorepo restructure: agents/<name>/ + agents/lib/ + web/
+
+`git mv` preserved history. Package `orrery_agent` → `orrery_engineering`.
+Shared, agent-agnostic code factored into **`orrery_lib`** (gateway
+client, KB wrapper, the agent↔backend schema, later `filestore` + `pm`).
+Each agent has its own pyproject/Dockerfile; a `uv` workspace root and an
+npm workspace (frontend) tie it together. `orrery-lib` deps are split:
+core = `pydantic` (light, for the schema) and an `[agent]` extra for the
+heavy deps, so the backend installs lib without pydantic-ai/qdrant/etc.
+
+## 2026-06-12 — Backend mediates; agents are stateless HTTP services
+
+The engineering agent is wrapped in FastAPI (`/run`, later `/execute`).
+**Stateless** — conversation state lives in Postgres, not the agent. The
+structured response `AgentResponse {text, artifacts, proposals}` is
+defined ONCE in `orrery_lib.schema` and imported by both sides; the
+frontend gets TypeScript types from the backend's OpenAPI.
+
+Would reconsider when: streaming (SSE) is needed — today request/response
+is enough.
+
+## 2026-06-12 — Own email/password auth, not Google
+
+FastAPI backend on Postgres (SQLAlchemy + Alembic): **Argon2** password
+hashing, **server-side sessions** (signed cookie, sliding expiry),
+register/login/logout/me, password reset (email STUBBED to console;
+Postmark later). Sessions invalidate on password change. Gmail OAuth, when
+it lands, is a separate per-user *authorization* grant — never login.
+
+## 2026-06-12 — Frontend: React + Vite + TypeScript + Tailwind
+
+npm (pnpm absent), Tailwind v4 via its Vite plugin. TS types are
+**generated from the backend OpenAPI** (`openapi-typescript`) — no
+hand-maintained parallel types. A **Vite dev proxy** forwards `/api` to
+the backend so the session cookie stays same-origin (sidesteps
+CORS/SameSite). Project-primary navigation; conversation canvas renders
+Markdown + proposals + artifacts.
+
+## 2026-06-12 — Approval queue: honest risk routing + bounded execution
+
+`proposals` table; `governance.classify` sets the FINAL risk and may
+OVERRIDE the agent's claim (`save_spec` floored to medium — an
+external-fetch-and-write is never low). Routing: **low auto-executes,
+medium/high queue**. Execution delegates to the agent's backend-only
+`POST /execute` (the bounded write path); the reasoning loop still never
+writes. Slack notify-only seam for queued items.
+
+## 2026-06-12 — Document store: local filesystem (git-versioned), off Google Drive
+
+The engineering agent's read/write moved OFF Drive ONTO the server
+filesystem under `ORRERY_FILES_ROOT` (default `/var/lib/orrery/files`), a
+**git repo** — every agent write is committed. `orrery_lib/filestore.py`
+does filename+content search (PDFs filename-only), read+extract
+(.md/.txt/.docx; PDFs return a path pointer), and write-with-commit.
+Containers now run **non-root** (host uid on dev, the `orrery` user on
+deploy); the fastembed model is baked at `/opt/fastembed` so it works
+non-root. Drive content was migrated to the FS and left intact as an
+archive; the service account is retained only for the future Gmail work.
+
+Would reconsider when: a file-browser UI replaces SSH access; git-LFS if
+binary bloat bites.
+
+## 2026-06-13 — Cross-functional projects: multi-agent schema + shared project tools
+
+Projects engage MULTIPLE agents. New tables: `project_agents` (which
+agents are engaged), `project_member_agents` (per-user-per-project-per-
+agent `can_talk`/`can_approve`); `projects.slug`; richer `tasks` +
+`task_documents`. Each project gets a filesystem tree
+`projects/<slug>/{drafts,engineering,marketing,manufacturing,decisions}/`
+plus a sectioned `research-log.md`. **Project management is capabilities,
+not an agent** — the task + research-log tools live in `orrery_lib/pm.py`
+and any agent inherits them via `register(agent)`.
+
+Agent↔backend uses **approach (a)**: the agent has no DB access, so the
+backend mints a short-lived **signed callback token** (`{user, agent,
+project}`) per project run; the agent's tools call `/internal/agent/*`,
+which enforces `project_agents` (an agent not engaged on a project is
+refused). Keeps the backend the single enforcement point. Research-log
+appends are append-only + attributed; humans edit by hand.
+
+Would reconsider when: content-based agent routing (the EA), or a
+per-agent permission admin UI.
+
 ---
 
-**Both agents live. The ENGINEERING agent (Phase 0/1's real target
-per CLAUDE.md) is functionally COMPLETE and verified end-to-end; the
-SUPPORT agent from the prior session is kept frozen alongside it.**
+## Where we left off (2026-06-13)
 
-Engineering capabilities, all verified against the real Google Shared
-Drive:
+**Orrery is an operational web app.** A signed-in user picks a project (or
+the global context), chats with the engineering agent, and resolves
+proposals — all on the local filesystem document store.
 
-1. **Gateway / KB / Exa web research** — cited, with
-   verify-before-relying notes.
-2. **Drive read + inward Q&A** — finds and cites real docs; reads
-   Google Docs and `.docx`; surfaces PDFs as links (no extraction).
-3. **Draft creation** — `.docx` template → filled Markdown → formatted
-   Google Doc in `drafts/` (headings, bold, lists, tables).
-4. **Slack 👍/👎** — `post_review` feedback semantics (the draft already
-   lives in Drive; the reaction just logs a verdict).
-5. **Spec download** — human-approved fetch of a web datasheet into
-   `drafts/` (verified: TI INA228 PDF stored as `application/pdf`).
+What's built and verified:
 
-Commands (all `make` targets):
-- `eng-ask Q="..."` — one-shot Q&A.
-- `eng-chat` — interactive REPL (context across turns, token usage,
-  in-chat save approval). Run it in your OWN terminal — needs a live
-  keyboard.
-- `eng-draft TEMPLATE="..." PURPOSE="..."` — template → formatted draft
-  → 👍/👎.
-- `eng-save-spec URL="..."` — standalone human-run download into
-  `drafts/`.
-- KB: `kb-list / kb-search / kb-delete / index-docs`.
+- **Engineering agent** — file-store Q&A with citations (filename+content
+  search; PDFs surfaced by path, not extracted), Exa parts research with
+  verify-notes, Markdown drafting into `drafts/`, human-approved datasheet
+  download. Runs as an HTTP service (`:8001`) AND a CLI.
+- **Backend** (`:8000`, FastAPI on Postgres) — Argon2 email/password auth +
+  sessions + password reset; agent registry + routing; persisted
+  conversations keyed on (user, agent, project); the approval queue
+  (risk-routed proposals); the `/internal/agent` API for project tools.
+- **Frontend** (`:5173`, React+Vite+TS) — auth, project-primary nav, the
+  conversation canvas (Markdown + proposals + artifacts), pending-approvals
+  panel.
+- **Document store** — `/var/lib/orrery/files/`, a git repo; every agent
+  write is committed.
+- **Cross-functional projects** — `project_agents` / `project_member_agents`,
+  per-project folder trees + sectioned research logs, and shared task +
+  research-log tools any agent inherits (only engineering wired).
 
-Runtime model: `gateway` + `qdrant` run always (`docker compose up -d`);
-the agent is CLI-shaped (`profiles: [cli]`), one fresh container per
-command, latest mounted source (rebuild only when a dependency changes).
+Run it: `make up` (backend stack) + `npm run dev` (frontend). CLI:
+`make ask|chat|draft|save-spec`, plus KB tools. Everything is committed and
+pushed to `github.com/jgronktn/orrery`.
 
-**Open calls awaiting your decision:**
-
-- **Git**: nothing in `orrery/` is committed yet; no remote. First
-  commit is a one-line decision (offered repeatedly).
-- **CLAUDE.md egress invariant**: RESOLVED (2026-06-03) — CLAUDE.md's
-  egress invariant now carries a sub-bullet recording the human-invoked
-  spec-download exception. (See the 2026-06-03 decision.)
-- **Judgment gate**: per CLAUDE.md, the next gate is "did this actually
-  help my engineering work?", NOT scope expansion. No Phase 2
-  (bookkeeping / EA) until that question is answered.
-- **Deploy**: still unplanned (see the noviustec notes above if/when it
-  matters).
+**Next (per CLAUDE.md):** Gmail/email integration (inbox view,
+thread→project assignment with KB ingestion, outbound Gmail drafts), then a
+file-browser UI, the `infra/` relocation of compose, real Postmark, and
+deployment to a DigitalOcean Droplet.
 
 **Things that may surprise a fresh reader:**
 
-- Two agents coexist on purpose (engineering + support). Don't collapse
-  to one to match CLAUDE.md.
-- The agent has NO write or network-fetch tool. Writes happen only in
-  separate driver-invoked modules — `draft.py` and `fetch.py` for
-  engineering, `send.py` for support — after a human gesture.
-  `request_spec_save` only *proposes* a download; it does no I/O.
-- The engineering corpus is a Shared Drive — Drive queries need
-  `corpora='drive'`, and the read folders must be shared with the SA
-  (Viewer); `drafts/` is the only Editor share.
-- `chat()` is in `engineering/chat.py`, not `agent.py`, to keep the
-  reasoning module clear of the write/egress path.
-- `gateway/config.yaml` lists three model aliases; the agents pick one
-  via `ORRERY_MODEL` (default `claude-sonnet`). Switching is one env
-  var, no code change.
+- The **support agent is gone** (deleted in the 2026-06-12 restructure).
+  Engineering is the only agent.
+- Documents are on the **local filesystem** (git-versioned), NOT Google
+  Drive. Drive is an archive only; the service account is kept for Gmail.
+- The agent has **no write, network-fetch, or database tool**. Writes go
+  through separate, governed paths: `draft.py`/`fetch.py` (function-scoped,
+  approval-gated) and the backend's `/internal/agent` API (project-scoped,
+  `project_agents`-gated). `request_spec_save` only *proposes*.
+- The agent reaches Postgres-backed project state only via the backend
+  callback token — it never connects to the DB.
+- Containers run **non-root** (host uid on dev). A root-owned legacy mount
+  (e.g. an old `logs/actions.jsonl`) must be re-chowned or the agent can't
+  write it.
+- `gateway/config.yaml` lists three model aliases; agents pick one via
+  `ORRERY_MODEL` (default `claude-sonnet`).
