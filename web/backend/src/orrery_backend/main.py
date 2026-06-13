@@ -10,6 +10,7 @@ from .agents import router as agents_router
 from .approvals import router as approvals_router
 from .auth import router as auth_router
 from .config import settings
+from .internal import router as internal_router
 from .projects import router as projects_router
 
 logging.basicConfig(level=logging.INFO)
@@ -34,3 +35,4 @@ app.include_router(auth_router)
 app.include_router(projects_router)
 app.include_router(agents_router)
 app.include_router(approvals_router)
+app.include_router(internal_router)

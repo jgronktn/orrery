@@ -6,7 +6,7 @@ orrery_lib.schema, defined once and shared.)
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
@@ -81,8 +81,43 @@ class TaskOut(BaseModel):
 
     id: uuid.UUID
     title: str
+    description: str | None = None
     status: str
+    owner_id: uuid.UUID | None = None
+    due_date: date | None = None
     created_at: datetime
+
+
+# ── Internal agent API (agent → backend, callback-token auth) ───────
+
+
+class AgentTaskIn(BaseModel):
+    title: str = Field(min_length=1, max_length=300)
+    description: str | None = None
+    owner_id: uuid.UUID | None = None
+    due_date: date | None = None
+
+
+class AgentTaskUpdate(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    status: str | None = None
+    owner_id: uuid.UUID | None = None
+    due_date: date | None = None
+
+
+class LinkDocIn(BaseModel):
+    doc_path: str = Field(min_length=1, max_length=500)
+
+
+class ResearchLogAppendIn(BaseModel):
+    section: str = Field(min_length=1)
+    content: str = Field(min_length=1)
+
+
+class ResearchLogOut(BaseModel):
+    project_id: uuid.UUID
+    content: str
 
 
 # ── Conversation (persisted, keyed on user+agent+project) ───────────
