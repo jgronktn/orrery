@@ -48,10 +48,20 @@ class Proposal(BaseModel):
     payload: dict = Field(default_factory=dict)
 
 
+class AgentCallback(BaseModel):
+    """Lets the agent call back into the backend's /internal/agent API for
+    project-scoped PM + research-log ops. The token encodes
+    (user, agent, project); the backend enforces project_agents."""
+
+    token: str
+    backend_url: str
+
+
 class AgentRequest(BaseModel):
     query: str
     conversation_history: list[ConversationTurn] = Field(default_factory=list)
     project_context: dict | None = None
+    callback: AgentCallback | None = None
 
 
 class AgentResponse(BaseModel):

@@ -24,9 +24,10 @@ from dataclasses import dataclass, field
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.messages import ModelResponse, TextPart
 
-from orrery_lib import NotConfiguredError, kb
+from orrery_lib import NotConfiguredError, kb, pm
 from orrery_lib.filestore import FileStoreReader, build_engineering_reader
 from orrery_lib.gateway import build_model
+from orrery_lib.pm import BackendClient
 
 from .config import ENGINEERING_CONFIG_PATH, load_instructions
 from . import websearch
@@ -44,6 +45,9 @@ class EngineeringDeps:
     invokes the separate fetch module. Empty for one-shot ask/draft."""
 
     files: FileStoreReader
+    # Set when running inside a project conversation: a client for the
+    # backend's /internal/agent API (tasks + research log). None otherwise.
+    backend: BackendClient | None = None
     pending_saves: list[dict] = field(default_factory=list)
 
 
@@ -206,6 +210,10 @@ def build_agent() -> Agent[EngineeringDeps, str]:
             "store it myself — the user will be asked to approve, and a "
             "separate step will store it on approval."
         )
+
+    # Shared project-management + research-log tools (active only inside a
+    # project conversation, where deps.backend is set).
+    pm.register(agent, default_log_section="Engineering")
 
     return agent
 

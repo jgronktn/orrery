@@ -15,7 +15,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
 
-from orrery_lib.schema import AgentRequest, AgentResponse, ConversationTurn, Risk
+from orrery_lib.schema import (
+    AgentCallback,
+    AgentRequest,
+    AgentResponse,
+    ConversationTurn,
+    Risk,
+)
 
 from .auth import current_user
 from .config import settings
@@ -24,6 +30,7 @@ from .governance import classify, execute_proposal
 from .models import Conversation, Message, ProposalRecord, Project, User
 from .projects import require_membership
 from .schemas import AgentSummary, MessageOut, SendMessageIn
+from .security import sign_agent_callback
 from .slack import notify_approval
 
 
@@ -126,6 +133,7 @@ async def send_message(
     agent = _require_agent(agent_id)
 
     project_context: dict | None = None
+    callback: AgentCallback | None = None
     if body.project_id is not None:
         require_membership(body.project_id, user, db)
         project = db.get(Project, body.project_id)
@@ -133,6 +141,18 @@ async def send_message(
             "project_id": str(body.project_id),
             "project_name": project.name if project else None,
         }
+        # Mint a short-lived callback token so the agent can reach the
+        # /internal/agent API (tasks + research log) for this project.
+        token = sign_agent_callback(
+            {
+                "user_id": str(user.id),
+                "agent_id": agent_id,
+                "project_id": str(body.project_id),
+            }
+        )
+        callback = AgentCallback(
+            token=token, backend_url=settings.backend_internal_url
+        )
 
     conv = _find_conversation(db, user, agent_id, body.project_id)
     if conv is None:
@@ -149,6 +169,7 @@ async def send_message(
         query=body.query,
         conversation_history=history,
         project_context=project_context,
+        callback=callback,
     )
     try:
         async with httpx.AsyncClient(timeout=300.0) as client:

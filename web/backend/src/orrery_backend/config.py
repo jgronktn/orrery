@@ -25,6 +25,8 @@ class Settings(BaseSettings):
 
     # Agent HTTP services (the backend is the only caller).
     engineering_agent_url: str = "http://engineering:8001"
+    # URL agents use to call back into /internal/agent/* (in-network name).
+    backend_internal_url: str = "http://backend:8000"
 
     # CORS origins for the future frontend (Vite dev server).
     cors_origins: list[str] = ["http://localhost:5173"]

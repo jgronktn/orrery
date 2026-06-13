@@ -28,8 +28,10 @@ from orrery_lib.schema import (
     Risk,
 )
 
-from .agent import EngineeringDeps, _join_text, build_agent
 from orrery_lib.filestore import build_engineering_reader
+from orrery_lib.pm import BackendClient
+
+from .agent import EngineeringDeps, _join_text, build_agent
 from .fetch import fetch_to_drafts
 
 
@@ -47,7 +49,10 @@ def _to_message_history(turns: list[ConversationTurn]):
 async def run_once(req: AgentRequest) -> AgentResponse:
     """Answer one query. Read-only reasoning; any write the agent wants
     surfaces as a Proposal for the backend to approve."""
-    deps = EngineeringDeps(files=build_engineering_reader())
+    backend = None
+    if req.callback is not None:
+        backend = BackendClient(req.callback.backend_url, req.callback.token)
+    deps = EngineeringDeps(files=build_engineering_reader(), backend=backend)
     agent = build_agent()
     history = _to_message_history(req.conversation_history)
 
