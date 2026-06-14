@@ -103,14 +103,24 @@ def register(agent, *, default_log_section: str = "Engineering") -> None:
         title: str,
         description: str | None = None,
         due_date: str | None = None,
+        kind: str = "task",
     ) -> dict | str:
-        """Create a task on the current project. due_date is ISO (YYYY-MM-DD)."""
+        """Create an action item on the current project. due_date is ISO
+        (YYYY-MM-DD). kind is 'task', 'milestone', or 'reminder' — use
+        'milestone' for dated project checkpoints and 'reminder' for dated
+        nudges; both should carry a due_date. Echo the resolved date back to
+        the user so they can catch a misread."""
         be = _client(ctx)
         if be is None:
             return NO_PROJECT
         try:
             return await be.create_task(
-                {"title": title, "description": description, "due_date": due_date}
+                {
+                    "title": title,
+                    "description": description,
+                    "due_date": due_date,
+                    "kind": kind,
+                }
             )
         except Exception as exc:
             return _err(exc)
@@ -123,8 +133,10 @@ def register(agent, *, default_log_section: str = "Engineering") -> None:
         title: str | None = None,
         description: str | None = None,
         due_date: str | None = None,
+        kind: str | None = None,
     ) -> dict | str:
-        """Update a task (status/title/description/due_date). Get task_id from
+        """Update a task (status/title/description/due_date/kind). kind is
+        'task', 'milestone', or 'reminder'. Get task_id from
         list_project_tasks."""
         be = _client(ctx)
         if be is None:
@@ -136,6 +148,7 @@ def register(agent, *, default_log_section: str = "Engineering") -> None:
                 "title": title,
                 "description": description,
                 "due_date": due_date,
+                "kind": kind,
             }.items()
             if v is not None
         }

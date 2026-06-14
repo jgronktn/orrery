@@ -12,6 +12,7 @@ from datetime import date, datetime
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
     Boolean,
     Date,
     DateTime,
@@ -142,6 +143,10 @@ class Task(Base):
     title: Mapped[str] = mapped_column(String(300))
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="todo")
+    # task | milestone | reminder — controls how it reads on the timeline.
+    kind: Mapped[str] = mapped_column(
+        String(20), default="task", server_default="task"
+    )
     owner_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id"), nullable=True
     )
@@ -303,3 +308,29 @@ class TaskDocument(Base):
     )
 
     task: Mapped["Task"] = relationship(back_populates="documents")
+
+
+class ProjectDocument(Base):
+    """A file dropped onto a project's timeline. Bytes live in the document
+    store under projects/<slug>/attachments/; this row carries the timeline
+    date (occurred_at) — drop time for files, the parsed Date header for
+    emails — independent of the git commit time."""
+
+    __tablename__ = "project_documents"
+
+    id: Mapped[uuid.UUID] = mapped_column(SAUuid, primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
+    filename: Mapped[str] = mapped_column(String(300))  # stored name in attachments/
+    path: Mapped[str] = mapped_column(String(500))  # relative to the project dir
+    title: Mapped[str] = mapped_column(String(300))  # display name (email subject…)
+    type: Mapped[str] = mapped_column(String(20))  # ext-type | email
+    size: Mapped[int] = mapped_column(BigInteger)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    source: Mapped[str] = mapped_column(String(20))  # upload | email
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    uploaded_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

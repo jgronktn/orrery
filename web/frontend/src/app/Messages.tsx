@@ -7,10 +7,12 @@ export default function Messages({
   messages,
   busy,
   emptyHint,
+  onDelete,
 }: {
   messages: Message[];
   busy: boolean;
   emptyHint: string;
+  onDelete?: (id: string) => void;
 }) {
   if (messages.length === 0 && !busy) {
     return (
@@ -22,7 +24,7 @@ export default function Messages({
   return (
     <div className="flex flex-col gap-6">
       {messages.map((m) => (
-        <MessageView key={m.id} message={m} />
+        <MessageView key={m.id} message={m} onDelete={onDelete} />
       ))}
       {busy && (
         <p className="text-sm text-slate-400">Engineering agent is working…</p>
@@ -31,12 +33,29 @@ export default function Messages({
   );
 }
 
-function MessageView({ message }: { message: Message }) {
+function MessageView({
+  message,
+  onDelete,
+}: {
+  message: Message;
+  onDelete?: (id: string) => void;
+}) {
   const isUser = message.role === "user";
   const proposals = (message.proposals ?? []) as Proposal[];
   const artifacts = (message.artifacts ?? []) as Artifact[];
   return (
-    <div className={isUser ? "text-right" : ""}>
+    <div className={`group relative ${isUser ? "text-right" : ""}`}>
+      {onDelete && isUser && (
+        <button
+          type="button"
+          onClick={() => onDelete(message.id)}
+          title="Remove this exchange (prompt + response) from the conversation"
+          aria-label="Remove this exchange"
+          className="absolute -top-2 right-0 z-10 grid h-5 w-5 place-items-center rounded-full bg-white text-xs leading-none text-slate-400 shadow-sm ring-1 ring-slate-200 transition hover:text-slate-700"
+        >
+          ✕
+        </button>
+      )}
       <div
         className={
           isUser

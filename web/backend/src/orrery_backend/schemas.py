@@ -74,6 +74,9 @@ class ProjectOut(BaseModel):
 
 class TaskIn(BaseModel):
     title: str = Field(min_length=1, max_length=300)
+    description: str | None = None
+    due_date: date | None = None
+    kind: str = "task"  # task | milestone | reminder
 
 
 class TaskOut(BaseModel):
@@ -83,6 +86,7 @@ class TaskOut(BaseModel):
     title: str
     description: str | None = None
     status: str
+    kind: str = "task"
     owner_id: uuid.UUID | None = None
     due_date: date | None = None
     created_at: datetime
@@ -96,6 +100,7 @@ class AgentTaskIn(BaseModel):
     description: str | None = None
     owner_id: uuid.UUID | None = None
     due_date: date | None = None
+    kind: str = "task"  # task | milestone | reminder
 
 
 class AgentTaskUpdate(BaseModel):
@@ -104,6 +109,7 @@ class AgentTaskUpdate(BaseModel):
     status: str | None = None
     owner_id: uuid.UUID | None = None
     due_date: date | None = None
+    kind: str | None = None
 
 
 class LinkDocIn(BaseModel):
@@ -118,6 +124,24 @@ class ResearchLogAppendIn(BaseModel):
 class ResearchLogOut(BaseModel):
     project_id: uuid.UUID
     content: str
+
+
+# ── Project timeline ────────────────────────────────────────────────
+
+
+class TimelineNode(BaseModel):
+    id: str
+    kind: str  # file | task
+    name: str
+    time: int  # ms epoch
+    type: str  # code | style | markup | data | doc | image | other | task
+    ext: str | None = None
+    path: str | None = None
+    size: int | None = None
+    desc: str | None = None
+    batch: str | None = None
+    attached: bool = False
+    status: str | None = None
 
 
 # ── Conversation (persisted, keyed on user+agent+project) ───────────

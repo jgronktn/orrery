@@ -123,7 +123,7 @@ def get_messages(
     return list(conv.messages) if conv else []
 
 
-@router.post("/{agent_id}/messages", response_model=MessageOut)
+@router.post("/{agent_id}/messages", response_model=list[MessageOut])
 async def send_message(
     agent_id: str,
     body: SendMessageIn,
@@ -206,7 +206,8 @@ async def send_message(
         else:
             notify_approval(p.summary, final)
 
-    db.add(Message(conversation_id=conv.id, role="user", content=body.query))
+    user_msg = Message(conversation_id=conv.id, role="user", content=body.query)
+    db.add(user_msg)
     assistant = Message(
         conversation_id=conv.id,
         role="assistant",
@@ -216,5 +217,31 @@ async def send_message(
     )
     db.add(assistant)
     db.commit()
+    db.refresh(user_msg)
     db.refresh(assistant)
-    return assistant
+    # Return both persisted turns (with real ids) so the UI can address each
+    # message — e.g. to delete one and prune it from future context.
+    return [user_msg, assistant]
+
+
+@router.delete(
+    "/{agent_id}/messages/{message_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_message(
+    agent_id: str,
+    message_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> None:
+    """Delete one message from the user's conversation. Since conversation
+    history is what the agent sees, this prunes that turn from future context."""
+    _require_agent(agent_id)
+    msg = db.get(Message, message_id)
+    if msg is not None:
+        conv = db.get(Conversation, msg.conversation_id)
+        if conv is not None and conv.user_id == user.id and conv.agent_id == agent_id:
+            db.delete(msg)
+            db.commit()
+            return None
+    raise HTTPException(status.HTTP_404_NOT_FOUND, "message not found")

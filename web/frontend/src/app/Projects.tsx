@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 
 import type { Project } from "../api/client";
+import { ALL_PROJECTS } from "./constants";
 
 export default function Projects({
   projects,
@@ -83,6 +84,14 @@ export default function Projects({
         >
           🌐 Global
         </button>
+        {projects.length > 0 && (
+          <button
+            className={itemClass(activeId === ALL_PROJECTS)}
+            onClick={() => onSelect(ALL_PROJECTS)}
+          >
+            🗂️ All projects
+          </button>
+        )}
         {projects.map((p) => (
           <button
             key={p.id}

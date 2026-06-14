@@ -9,9 +9,11 @@ import {
   type Task,
 } from "../api/client";
 import Approvals from "./Approvals";
+import { ALL_PROJECTS } from "./constants";
 import Messages from "./Messages";
 import Projects from "./Projects";
 import Tasks from "./Tasks";
+import Timeline from "./Timeline";
 
 const AGENT_ID = "engineering";
 
@@ -42,8 +44,18 @@ export default function Workspace() {
     void loadApprovals();
   };
 
+  // "All" is an overview pseudo-context (stacked timelines), not a real
+  // project — it has no conversation or task list of its own.
+  const isProject = activeId !== null && activeId !== ALL_PROJECTS;
+  const isAll = activeId === ALL_PROJECTS;
+
   // Load the (persisted) conversation + tasks whenever the context changes.
   useEffect(() => {
+    if (isAll) {
+      setMessages([]);
+      setTasks([]);
+      return;
+    }
     let cancelled = false;
     api
       .getMessages(AGENT_ID, activeId)
@@ -60,7 +72,7 @@ export default function Workspace() {
     return () => {
       cancelled = true;
     };
-  }, [activeId]);
+  }, [activeId, isAll]);
 
   const createProject = async (name: string, description: string) => {
     const p = await api.createProject({ name, description: description || null });
@@ -68,10 +80,40 @@ export default function Workspace() {
     setActiveId(p.id);
   };
 
-  const addTask = async (title: string) => {
-    if (!activeId) return;
-    const t = await api.createTask(activeId, title);
+  const addTask = async (
+    title: string,
+    dueDate: string | null,
+    kind: string,
+  ) => {
+    if (activeId === null || activeId === ALL_PROJECTS) return;
+    const t = await api.createTask(activeId, {
+      title,
+      due_date: dueDate,
+      kind,
+    });
     setTasks((prev) => [t, ...prev]);
+  };
+
+  // Remove a whole exchange — the user prompt plus the assistant response(s)
+  // that follow it (up to the next prompt) — pruning it from the context the
+  // agent sees next turn. Optimistic; a 404 just means it was never persisted.
+  const deleteTurn = async (userMessageId: string) => {
+    const idx = messages.findIndex((m) => m.id === userMessageId);
+    if (idx === -1) return;
+    const ids = [userMessageId];
+    for (let j = idx + 1; j < messages.length; j++) {
+      const mj = messages[j];
+      if (!mj || mj.role === "user") break;
+      ids.push(mj.id);
+    }
+    setMessages((prev) => prev.filter((m) => !ids.includes(m.id)));
+    for (const id of ids) {
+      try {
+        await api.deleteMessage(AGENT_ID, id);
+      } catch (err) {
+        if (!(err instanceof ApiError && err.status === 404)) console.error(err);
+      }
+    }
   };
 
   const send = async (e: FormEvent) => {
@@ -92,11 +134,16 @@ export default function Workspace() {
     setMessages((prev) => [...prev, optimistic]);
     setBusy(true);
     try {
-      const assistant = await api.sendMessage(AGENT_ID, {
+      // The backend returns both persisted turns (user + assistant) with real
+      // ids; swap them in for the optimistic placeholder.
+      const turns = await api.sendMessage(AGENT_ID, {
         query: q,
         project_id: activeId,
       });
-      setMessages((prev) => [...prev, assistant]);
+      setMessages((prev) => [
+        ...prev.filter((m) => m.id !== optimistic.id),
+        ...turns,
+      ]);
       void loadApprovals(); // a turn may have queued proposals
 
     } catch (err) {
@@ -109,7 +156,9 @@ export default function Workspace() {
   const activeName =
     activeId === null
       ? "Global"
-      : (projects.find((p) => p.id === activeId)?.name ?? "Project");
+      : isAll
+        ? "All projects"
+        : (projects.find((p) => p.id === activeId)?.name ?? "Project");
 
   return (
     <div className="grid grid-cols-[20rem_1fr] gap-4 h-full min-h-0">
@@ -124,8 +173,9 @@ export default function Workspace() {
           onCreate={createProject}
         />
 
-        {activeId && <Tasks tasks={tasks} onAdd={addTask} />}
+        {isProject && <Tasks tasks={tasks} onAdd={addTask} />}
 
+        {!isAll && (
         <form
           onSubmit={send}
           className="rounded-xl border border-slate-200 bg-white p-4 flex flex-col gap-3"
@@ -152,16 +202,35 @@ export default function Workspace() {
           </button>
           {error && <p className="text-sm text-red-600">{error}</p>}
         </form>
+        )}
       </aside>
 
-      {/* Right column: conversation canvas */}
-      <main className="rounded-xl border border-slate-200 bg-white p-6 overflow-y-auto min-h-0">
-        <Messages
-          messages={messages}
-          busy={busy}
-          emptyHint={`Ask the engineering agent in the ${activeName} context.`}
-        />
-      </main>
+      {/* Right column. All → stacked per-project timelines fill the area;
+          a project → timeline strip (~200px) above the conversation canvas;
+          global → just the conversation canvas. */}
+      <div className="flex flex-col gap-4 min-h-0">
+        {isAll ? (
+          <main className="flex flex-1 flex-col gap-4 overflow-y-auto min-h-0">
+            {projects.map((p) => (
+              <Timeline key={p.id} activeId={p.id} projectName={p.name} />
+            ))}
+          </main>
+        ) : (
+          <>
+            {isProject && (
+              <Timeline activeId={activeId} projectName={activeName} />
+            )}
+            <main className="flex-1 rounded-xl border border-slate-200 bg-white p-6 overflow-y-auto min-h-0">
+              <Messages
+                messages={messages}
+                busy={busy}
+                onDelete={deleteTurn}
+                emptyHint={`Ask the engineering agent in the ${activeName} context.`}
+              />
+            </main>
+          </>
+        )}
+      </div>
     </div>
   );
 }

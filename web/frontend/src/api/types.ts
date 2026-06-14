@@ -161,6 +161,69 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/timeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Project Timeline
+         * @description Timeline nodes for a project: files (git-timestamped) + dropped
+         *     documents (dated by drop time / email Date) + tasks.
+         */
+        get: operations["project_timeline_api_projects__project_id__timeline_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload Document
+         * @description Record a dropped file on the project's timeline. Regular files are
+         *     dated now; .eml emails are dated by their sent/received header.
+         */
+        post: operations["upload_document_api_projects__project_id__documents_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/documents/{document_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Document
+         * @description Remove a dropped document from the timeline — deletes the stored file
+         *     (git-removed, history-recoverable) and the record.
+         */
+        delete: operations["delete_document_api_projects__project_id__documents__document_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/tasks": {
         parameters: {
             query?: never;
@@ -174,6 +237,26 @@ export interface paths {
         /** Create Task */
         post: operations["create_task_api_projects__project_id__tasks_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/tasks/{task_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Task
+         * @description Remove an action item (task/milestone/reminder) from the project.
+         */
+        delete: operations["delete_task_api_projects__project_id__tasks__task_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -231,6 +314,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/agents/{agent_id}/messages/{message_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Message
+         * @description Delete one message from the user's conversation. Since conversation
+         *     history is what the agent sees, this prunes that turn from future context.
+         */
+        delete: operations["delete_message_api_agents__agent_id__messages__message_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/approvals": {
         parameters: {
             query?: never;
@@ -282,10 +386,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/internal/agent/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Project Tasks */
+        get: operations["list_project_tasks_internal_agent_tasks_get"];
+        put?: never;
+        /** Create Task */
+        post: operations["create_task_internal_agent_tasks_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/agent/tasks/{task_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Task */
+        patch: operations["update_task_internal_agent_tasks__task_id__patch"];
+        trace?: never;
+    };
+    "/internal/agent/tasks/{task_id}/docs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Link Task To Doc */
+        post: operations["link_task_to_doc_internal_agent_tasks__task_id__docs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/agent/research-log": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Research Log */
+        get: operations["read_research_log_internal_agent_research_log_get"];
+        put?: never;
+        /** Append Research Log */
+        post: operations["append_research_log_internal_agent_research_log_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AgentCallback
+         * @description Lets the agent call back into the backend's /internal/agent API for
+         *     project-scoped PM + research-log ops. The token encodes
+         *     (user, agent, project); the backend enforces project_agents.
+         */
+        AgentCallback: {
+            /** Token */
+            token: string;
+            /** Backend Url */
+            backend_url: string;
+        };
         /** AgentRequest */
         AgentRequest: {
             /** Query */
@@ -296,6 +482,7 @@ export interface components {
             project_context?: {
                 [key: string]: unknown;
             } | null;
+            callback?: components["schemas"]["AgentCallback"] | null;
         };
         /** AgentResponse */
         AgentResponse: {
@@ -315,6 +502,37 @@ export interface components {
             /** Description */
             description: string;
         };
+        /** AgentTaskIn */
+        AgentTaskIn: {
+            /** Title */
+            title: string;
+            /** Description */
+            description?: string | null;
+            /** Owner Id */
+            owner_id?: string | null;
+            /** Due Date */
+            due_date?: string | null;
+            /**
+             * Kind
+             * @default task
+             */
+            kind: string;
+        };
+        /** AgentTaskUpdate */
+        AgentTaskUpdate: {
+            /** Title */
+            title?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Status */
+            status?: string | null;
+            /** Owner Id */
+            owner_id?: string | null;
+            /** Due Date */
+            due_date?: string | null;
+            /** Kind */
+            kind?: string | null;
+        };
         /**
          * Artifact
          * @description Something the agent produced this turn (e.g. a created Drive doc).
@@ -331,6 +549,11 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /** Body_upload_document_api_projects__project_id__documents_post */
+        Body_upload_document_api_projects__project_id__documents_post: {
+            /** File */
+            file: string;
+        };
         /**
          * ConversationTurn
          * @description One prior turn, as the backend stores/sends it (stateless agent).
@@ -345,6 +568,11 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** LinkDocIn */
+        LinkDocIn: {
+            /** Doc Path */
+            doc_path: string;
         };
         /** LoginIn */
         LoginIn: {
@@ -485,6 +713,23 @@ export interface components {
             /** Display Name */
             display_name: string;
         };
+        /** ResearchLogAppendIn */
+        ResearchLogAppendIn: {
+            /** Section */
+            section: string;
+            /** Content */
+            content: string;
+        };
+        /** ResearchLogOut */
+        ResearchLogOut: {
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Content */
+            content: string;
+        };
         /**
          * Risk
          * @enum {string}
@@ -501,6 +746,15 @@ export interface components {
         TaskIn: {
             /** Title */
             title: string;
+            /** Description */
+            description?: string | null;
+            /** Due Date */
+            due_date?: string | null;
+            /**
+             * Kind
+             * @default task
+             */
+            kind: string;
         };
         /** TaskOut */
         TaskOut: {
@@ -511,13 +765,54 @@ export interface components {
             id: string;
             /** Title */
             title: string;
+            /** Description */
+            description?: string | null;
             /** Status */
             status: string;
+            /**
+             * Kind
+             * @default task
+             */
+            kind: string;
+            /** Owner Id */
+            owner_id?: string | null;
+            /** Due Date */
+            due_date?: string | null;
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
+        };
+        /** TimelineNode */
+        TimelineNode: {
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Name */
+            name: string;
+            /** Time */
+            time: number;
+            /** Type */
+            type: string;
+            /** Ext */
+            ext?: string | null;
+            /** Path */
+            path?: string | null;
+            /** Size */
+            size?: number | null;
+            /** Desc */
+            desc?: string | null;
+            /** Batch */
+            batch?: string | null;
+            /**
+             * Attached
+             * @default false
+             */
+            attached: boolean;
+            /** Status */
+            status?: string | null;
         };
         /** UserOut */
         UserOut: {
@@ -841,6 +1136,102 @@ export interface operations {
             };
         };
     };
+    project_timeline_api_projects__project_id__timeline_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimelineNode"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_document_api_projects__project_id__documents_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_document_api_projects__project_id__documents_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimelineNode"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_document_api_projects__project_id__documents__document_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_tasks_api_projects__project_id__tasks_get: {
         parameters: {
             query?: never;
@@ -895,6 +1286,36 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["TaskOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_task_api_projects__project_id__tasks__task_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -1016,8 +1437,38 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["MessageOut"];
+                    "application/json": components["schemas"]["MessageOut"][];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_message_api_agents__agent_id__messages__message_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+                message_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -1110,6 +1561,182 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProposalOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_project_tasks_internal_agent_tasks_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskOut"][];
+                };
+            };
+        };
+    };
+    create_task_internal_agent_tasks_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentTaskIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_task_internal_agent_tasks__task_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentTaskUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    link_task_to_doc_internal_agent_tasks__task_id__docs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkDocIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_research_log_internal_agent_research_log_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchLogOut"];
+                };
+            };
+        };
+    };
+    append_research_log_internal_agent_research_log_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResearchLogAppendIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchLogOut"];
                 };
             };
             /** @description Validation Error */

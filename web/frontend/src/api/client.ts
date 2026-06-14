@@ -17,6 +17,7 @@ export type Task = components["schemas"]["TaskOut"];
 export type Message = components["schemas"]["MessageOut"];
 export type SendMessageIn = components["schemas"]["SendMessageIn"];
 export type ProposalRecord = components["schemas"]["ProposalOut"];
+export type TimelineNode = components["schemas"]["TimelineNode"];
 
 export class ApiError extends Error {
   status: number;
@@ -30,9 +31,14 @@ export class ApiError extends Error {
 const BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  // FormData sets its own multipart Content-Type (with boundary); don't force JSON.
+  const isForm = init?.body instanceof FormData;
   const res = await fetch(`${BASE}${path}`, {
     credentials: "include",
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    headers: {
+      ...(isForm ? {} : { "Content-Type": "application/json" }),
+      ...(init?.headers ?? {}),
+    },
     ...init,
   });
   if (!res.ok) {
@@ -78,10 +84,13 @@ export const api = {
     }),
   listTasks: (projectId: string) =>
     request<Task[]>(`/api/projects/${projectId}/tasks`),
-  createTask: (projectId: string, title: string) =>
+  createTask: (
+    projectId: string,
+    body: { title: string; due_date?: string | null; kind?: string },
+  ) =>
     request<Task>(`/api/projects/${projectId}/tasks`, {
       method: "POST",
-      body: JSON.stringify({ title }),
+      body: JSON.stringify(body),
     }),
 
   // Persisted conversation (project_id null = global context)
@@ -91,9 +100,34 @@ export const api = {
         (projectId ? `?project_id=${projectId}` : ""),
     ),
   sendMessage: (agentId: string, body: SendMessageIn) =>
-    request<Message>(`/api/agents/${agentId}/messages`, {
+    request<Message[]>(`/api/agents/${agentId}/messages`, {
       method: "POST",
       body: JSON.stringify(body),
+    }),
+  deleteMessage: (agentId: string, messageId: string) =>
+    request<void>(`/api/agents/${agentId}/messages/${messageId}`, {
+      method: "DELETE",
+    }),
+
+  // Project timeline (files + action items)
+  projectTimeline: (projectId: string) =>
+    request<TimelineNode[]>(`/api/projects/${projectId}/timeline`),
+  // Drop a file onto a project's timeline (.eml dated by its sent/received header)
+  uploadDocument: (projectId: string, file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request<TimelineNode>(`/api/projects/${projectId}/documents`, {
+      method: "POST",
+      body: fd,
+    });
+  },
+  deleteDocument: (projectId: string, documentId: string) =>
+    request<void>(`/api/projects/${projectId}/documents/${documentId}`, {
+      method: "DELETE",
+    }),
+  deleteTask: (projectId: string, taskId: string) =>
+    request<void>(`/api/projects/${projectId}/tasks/${taskId}`, {
+      method: "DELETE",
     }),
 
   // Approval queue
