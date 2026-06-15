@@ -18,6 +18,7 @@ export type Message = components["schemas"]["MessageOut"];
 export type SendMessageIn = components["schemas"]["SendMessageIn"];
 export type ProposalRecord = components["schemas"]["ProposalOut"];
 export type TimelineNode = components["schemas"]["TimelineNode"];
+export type FsTreeNode = components["schemas"]["FsTreeNode"];
 
 export class ApiError extends Error {
   status: number;
@@ -69,6 +70,8 @@ export const api = {
     }),
   logout: () => request<void>("/api/auth/logout", { method: "POST" }),
   listAgents: () => request<AgentSummary[]>("/api/agents"),
+  agentTree: (agentId: string) =>
+    request<FsTreeNode>(`/api/agents/${agentId}/tree`),
   runAgent: (agentId: string, body: AgentRequest) =>
     request<AgentResponse>(`/api/agents/${agentId}/run`, {
       method: "POST",

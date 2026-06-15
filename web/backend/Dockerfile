@@ -19,6 +19,12 @@ COPY web/backend/alembic.ini ./backend/
 COPY web/backend/alembic ./backend/alembic
 RUN pip install --no-cache-dir -e ./backend
 
+# Prefetch the embedding model into a world-readable path (not /root/.cache)
+# so the backend can embed documents (Tier 1) when run as a non-root UID.
+ENV ORRERY_FASTEMBED_CACHE=/opt/fastembed
+RUN mkdir -p /opt/fastembed && chmod 777 /opt/fastembed \
+    && python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-small-en-v1.5', cache_dir='/opt/fastembed')"
+
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 

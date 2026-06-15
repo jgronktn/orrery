@@ -170,8 +170,8 @@ export interface paths {
         };
         /**
          * Project Timeline
-         * @description Timeline nodes for a project: files (git-timestamped) + dropped
-         *     documents (dated by drop time / email Date) + tasks.
+         * @description Timeline nodes for a container (project or function stream): files
+         *     (git-timestamped) + cataloged timeline events + tasks.
          */
         get: operations["project_timeline_api_projects__project_id__timeline_get"];
         put?: never;
@@ -193,8 +193,8 @@ export interface paths {
         put?: never;
         /**
          * Upload Document
-         * @description Record a dropped file on the project's timeline. Regular files are
-         *     dated now; .eml emails are dated by their sent/received header.
+         * @description Drop a file onto the project's timeline (Tier 0/1 via commit_path).
+         *     Regular files are dated now; .eml emails by their sent/received header.
          */
         post: operations["upload_document_api_projects__project_id__documents_post"];
         delete?: never;
@@ -215,10 +215,32 @@ export interface paths {
         post?: never;
         /**
          * Delete Document
-         * @description Remove a dropped document from the timeline — deletes the stored file
-         *     (git-removed, history-recoverable) and the record.
+         * @description Remove a cataloged file: git-remove the bytes, drop its embeddings and
+         *     catalog row (git history retains it).
          */
         delete: operations["delete_document_api_projects__project_id__documents__document_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search Project
+         * @description Container-scoped file search. Keyword (Postgres FTS) always; semantic
+         *     (the `documents` collection) when toggled. No agent. A project scopes by
+         *     container_id; a function stream scopes by its function corpus.
+         */
+        get: operations["search_project_api_projects__project_id__search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -290,6 +312,48 @@ export interface paths {
         put?: never;
         /** Run Agent */
         post: operations["run_agent_api_agents__agent_id__run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agents/{agent_id}/tree": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Agent Tree
+         * @description The filesystem the agent can reach: its general reference corpus plus
+         *     every project tree the requesting user shares with it.
+         */
+        get: operations["agent_tree_api_agents__agent_id__tree_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agents/{agent_id}/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search Agent
+         * @description Search the agent's general reference corpus (function-level files).
+         *     Project files are searched via the project-scoped endpoint.
+         */
+        get: operations["search_agent_api_agents__agent_id__search_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -564,6 +628,17 @@ export interface components {
             /** Content */
             content: string;
         };
+        /**
+         * FsTreeNode
+         * @description A node in the agent's filesystem tree. Folders carry `children`
+         *     (possibly empty); files have it as null.
+         */
+        FsTreeNode: {
+            /** Name */
+            name: string;
+            /** Children */
+            children?: components["schemas"]["FsTreeNode"][] | null;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -645,6 +720,13 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /**
+             * Kind
+             * @default project
+             */
+            kind: string;
+            /** Function */
+            function?: string | null;
             /**
              * Role
              * @default member
@@ -735,6 +817,26 @@ export interface components {
          * @enum {string}
          */
         Risk: "low" | "medium" | "high";
+        /** SearchHit */
+        SearchHit: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Path */
+            path: string;
+            /** Title */
+            title: string;
+            /** Type */
+            type: string;
+            /** Snippet */
+            snippet?: string | null;
+            /** Score */
+            score?: number | null;
+            /** Mode */
+            mode: string;
+        };
         /** SendMessageIn */
         SendMessageIn: {
             /** Query */
@@ -1232,6 +1334,40 @@ export interface operations {
             };
         };
     };
+    search_project_api_projects__project_id__search_get: {
+        parameters: {
+            query: {
+                q: string;
+                semantic?: boolean;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchHit"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_tasks_api_projects__project_id__tasks_get: {
         parameters: {
             query?: never;
@@ -1370,6 +1506,71 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agent_tree_api_agents__agent_id__tree_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FsTreeNode"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_agent_api_agents__agent_id__search_get: {
+        parameters: {
+            query: {
+                q: string;
+                semantic?: boolean;
+            };
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchHit"][];
                 };
             };
             /** @description Validation Error */

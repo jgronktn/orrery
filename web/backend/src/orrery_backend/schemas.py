@@ -66,6 +66,8 @@ class ProjectOut(BaseModel):
     description: str | None
     archived: bool
     created_at: datetime
+    kind: str = "project"  # project | function_stream
+    function: str | None = None  # set for function_stream
     role: str = "member"  # the requesting user's role in this project
 
 
@@ -127,6 +129,24 @@ class ResearchLogOut(BaseModel):
 
 
 # ── Project timeline ────────────────────────────────────────────────
+
+
+class SearchHit(BaseModel):
+    id: uuid.UUID
+    path: str
+    title: str
+    type: str
+    snippet: str | None = None
+    score: float | None = None
+    mode: str  # keyword | semantic
+
+
+class FsTreeNode(BaseModel):
+    """A node in the agent's filesystem tree. Folders carry `children`
+    (possibly empty); files have it as null."""
+
+    name: str
+    children: "list[FsTreeNode] | None" = None
 
 
 class TimelineNode(BaseModel):

@@ -58,6 +58,24 @@ def research_log_path(slug: str):
     return project_dir(slug) / "research-log.md"
 
 
+_TREE_SKIP = {".git", ".gitkeep", ".DS_Store"}
+
+
+def build_tree(path: Path, name: str) -> dict:
+    """Walk a directory into a nested {name, children?} tree — folders carry a
+    children list, files don't (the explorer engine keys folder-ness on that).
+    Skips VCS/placeholder noise."""
+    node: dict = {"name": name}
+    if path.is_dir():
+        children: list[dict] = []
+        for child in sorted(path.iterdir(), key=lambda p: p.name.lower()):
+            if child.name in _TREE_SKIP:
+                continue
+            children.append(build_tree(child, child.name))
+        node["children"] = children
+    return node
+
+
 def create_project_tree(
     slug: str,
     name: str,
@@ -94,10 +112,17 @@ def create_project_tree(
 
 
 def project_files(slug: str) -> list[dict]:
-    """List the project's files as timeline nodes, timestamped by the git
-    commit that ADDED each one (batch = that commit). Files not yet committed
-    fall back to mtime. `.gitkeep` placeholders are skipped."""
-    root = project_dir(slug)
+    """Timeline file-nodes for a project folder (projects/<slug>/)."""
+    return folder_files(f"projects/{slug}")
+
+
+def folder_files(rel_root: str) -> list[dict]:
+    """List a folder's files as timeline nodes, timestamped by the git commit
+    that ADDED each one (batch = that commit). `rel_root` is relative to
+    FILES_ROOT — e.g. "projects/<slug>" (a project) or "engineering" (a
+    function stream). Uncommitted files fall back to mtime; `.gitkeep` and
+    `attachments/` (catalog-managed) are skipped."""
+    root = filestore.FILES_ROOT / rel_root
     if not root.exists():
         return []
 
@@ -106,7 +131,7 @@ def project_files(slug: str) -> list[dict]:
     added: dict[str, tuple[str, int]] = {}
     proc = subprocess.run(
         ["git", "-C", str(filestore.FILES_ROOT), "log", "--diff-filter=A",
-         "--name-only", "--format=__C__|%h|%at", "--", f"projects/{slug}/"],
+         "--name-only", "--format=__C__|%h|%at", "--", f"{rel_root}/"],
         capture_output=True, text=True,
     )
     cur: tuple[str, int] | None = None

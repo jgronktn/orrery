@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.messages import ModelResponse, TextPart
 
-from orrery_lib import NotConfiguredError, kb, pm
+from orrery_lib import NotConfiguredError, docstore, kb, pm
 from orrery_lib.filestore import FileStoreReader, build_engineering_reader
 from orrery_lib.gateway import build_model
 from orrery_lib.pm import BackendClient
@@ -100,14 +100,14 @@ def build_agent() -> Agent[EngineeringDeps, str]:
     async def search_docs(
         ctx: RunContext[EngineeringDeps], query: str, k: int = 5
     ) -> list[dict]:
-        """Search the curated knowledge base of indexed documents by
-        semantic similarity. Returns up to k hits with the passage
-        text, source, and a relevance score. Empty list = nothing
-        relevant indexed. Read-only.
+        """Search source documents (the catalog-backed `documents` index) by
+        semantic similarity. Returns up to k hits with the passage text, its
+        file path, and a relevance score. Empty list = nothing relevant
+        indexed. Read-only.
         """
-        hits = kb.search(kb.DOCS_COLLECTION, query, k=k)
+        hits = docstore.search(query, k=k)
         return [
-            {"text": h.text, "source": h.source, "relevance": round(h.score, 3)}
+            {"text": h.text, "source": h.path, "relevance": round(h.score, 3)}
             for h in hits
         ]
 

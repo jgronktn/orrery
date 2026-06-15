@@ -31,6 +31,8 @@ GIT_AUTHOR_EMAIL = os.environ.get("ORRERY_GIT_AUTHOR_EMAIL", "agent@orrery.local
 
 _TEXT_EXT = {".md", ".markdown", ".txt", ".csv"}
 _DOCX_EXT = {".docx"}
+_PDF_EXT = {".pdf"}
+_XLSX_EXT = {".xlsx"}
 _SNIPPET_CHARS = 240
 
 
@@ -89,13 +91,46 @@ def _docx_to_text(data: bytes) -> str:
     return "\n".join(lines).strip()
 
 
+def _pdf_to_text(data: bytes) -> str:
+    import pdfplumber
+
+    out: list[str] = []
+    with pdfplumber.open(io.BytesIO(data)) as pdf:
+        for page in pdf.pages:
+            out.append(page.extract_text() or "")
+    return "\n\n".join(out).strip()
+
+
+def _xlsx_to_text(data: bytes) -> str:
+    import openpyxl
+
+    wb = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+    lines: list[str] = []
+    for ws in wb.worksheets:
+        lines.append(f"# {ws.title}")
+        for row in ws.iter_rows(values_only=True):
+            cells = [str(c) for c in row if c is not None]
+            if cells:
+                lines.append(" | ".join(cells))
+    wb.close()
+    return "\n".join(lines).strip()
+
+
 def extract_text(path: Path) -> str | None:
-    """Text for Markdown/text/Word; None for binaries (PDFs, images)."""
+    """Deterministic text extraction for catalog/search (Tier 0). Returns None
+    for binaries we can't read here (images, archives) and OCR-only PDFs."""
     ext = path.suffix.lower()
-    if ext in _TEXT_EXT:
-        return path.read_text(encoding="utf-8", errors="replace")
-    if ext in _DOCX_EXT:
-        return _docx_to_text(path.read_bytes())
+    try:
+        if ext in _TEXT_EXT:
+            return path.read_text(encoding="utf-8", errors="replace")
+        if ext in _DOCX_EXT:
+            return _docx_to_text(path.read_bytes())
+        if ext in _PDF_EXT:
+            return _pdf_to_text(path.read_bytes()) or None
+        if ext in _XLSX_EXT:
+            return _xlsx_to_text(path.read_bytes()) or None
+    except Exception:
+        return None  # never let extraction failure block cataloging
     return None
 
 

@@ -97,7 +97,17 @@ class Project(Base):
     name: Mapped[str] = mapped_column(String(200))
     slug: Mapped[str] = mapped_column(String(220), unique=True, index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    # A container is either a bounded, cross-functional `project` (explicit
+    # membership + project_agents) or a perpetual `function_stream` (1:1 with
+    # one function, implicit single agent, inherited function-access). Streams
+    # are system-provisioned, so created_by is nullable.
+    kind: Mapped[str] = mapped_column(
+        String(20), default="project", server_default="project"
+    )
+    function: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -310,27 +320,37 @@ class TaskDocument(Base):
     task: Mapped["Task"] = relationship(back_populates="documents")
 
 
-class ProjectDocument(Base):
-    """A file dropped onto a project's timeline. Bytes live in the document
-    store under projects/<slug>/attachments/; this row carries the timeline
-    date (occurred_at) — drop time for files, the parsed Date header for
-    emails — independent of the git commit time."""
+class Catalog(Base):
+    """The universal file index. One row per file in the document store, by
+    any ingress path (upload, timeline-drop, agent, email, scan). Cataloging
+    is deterministic plumbing (Tier 0) — it makes a file findable the instant
+    it exists, with no agent involved. `extracted_text` backs keyword search
+    (a Postgres tsvector lives on this table); chunk embeddings live in the
+    Qdrant `documents` collection. A file is a timeline *event* only when
+    on_timeline is set (then occurred_at is its date)."""
 
-    __tablename__ = "project_documents"
+    __tablename__ = "catalog"
 
     id: Mapped[uuid.UUID] = mapped_column(SAUuid, primary_key=True, default=uuid.uuid4)
-    project_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    path: Mapped[str] = mapped_column(String(700), unique=True, index=True)  # rel to FILES_ROOT
+    container_kind: Mapped[str] = mapped_column(String(20))  # project | function
+    container_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True
     )
-    filename: Mapped[str] = mapped_column(String(300))  # stored name in attachments/
-    path: Mapped[str] = mapped_column(String(500))  # relative to the project dir
-    title: Mapped[str] = mapped_column(String(300))  # display name (email subject…)
-    type: Mapped[str] = mapped_column(String(20))  # ext-type | email
+    function: Mapped[str] = mapped_column(String(50))  # engineering, corporate, …
+    sub_function: Mapped[str | None] = mapped_column(String(50), nullable=True)  # facet (later)
+    type: Mapped[str] = mapped_column(String(20))  # node type: doc/code/email/…
+    ext: Mapped[str | None] = mapped_column(String(20), nullable=True)
     size: Mapped[int] = mapped_column(BigInteger)
-    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    source: Mapped[str] = mapped_column(String(20))  # upload | email
+    sha256: Mapped[str] = mapped_column(String(64))
+    source: Mapped[str] = mapped_column(String(20))  # upload|timeline_drop|agent|email|scan
+    uploader_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    title: Mapped[str] = mapped_column(String(300))
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    uploaded_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    occurred_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    on_timeline: Mapped[bool] = mapped_column(Boolean, default=False)
+    extracted_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    text_extracted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

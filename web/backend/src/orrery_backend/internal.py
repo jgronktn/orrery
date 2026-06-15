@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
 
-from . import projectstore
+from . import functions, projectstore
 from .db import get_db
 from .models import Project, ProjectAgent, Task, TaskDocument, User
 from .schemas import (
@@ -60,16 +60,21 @@ def agent_context(
     if user is None or project is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "unknown user or project")
 
-    engaged = db.scalar(
-        select(ProjectAgent).where(
-            ProjectAgent.project_id == project.id,
-            ProjectAgent.agent_id == agent_id,
-        )
-    )
-    if engaged is None:
+    # A function stream has one implicit agent (the function's). A project
+    # engages agents explicitly via project_agents.
+    if project.kind == "function_stream":
+        engaged = functions.agent_for_function(project.function) == agent_id
+    else:
+        engaged = db.scalar(
+            select(ProjectAgent).where(
+                ProjectAgent.project_id == project.id,
+                ProjectAgent.agent_id == agent_id,
+            )
+        ) is not None
+    if not engaged:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
-            f"agent '{agent_id}' is not engaged on this project",
+            f"agent '{agent_id}' is not engaged on this container",
         )
     return AgentContext(user=user, agent_id=agent_id, project=project)
 

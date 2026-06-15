@@ -13,6 +13,7 @@ from dataclasses import dataclass
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy import text as sqltext
 from sqlalchemy.orm import Session as DbSession
 
 from orrery_lib.schema import (
@@ -23,15 +24,30 @@ from orrery_lib.schema import (
     Risk,
 )
 
+from orrery_lib import docstore, filestore
+
+from . import projectstore
 from .auth import current_user
 from .config import settings
 from .db import get_db
 from .governance import classify, execute_proposal
-from .models import Conversation, Message, ProposalRecord, Project, User
-from .projects import require_membership
-from .schemas import AgentSummary, MessageOut, SendMessageIn
+from .models import (
+    Catalog,
+    Conversation,
+    Message,
+    Project,
+    ProjectAgent,
+    ProjectMember,
+    ProposalRecord,
+    User,
+)
+from .projects import get_container
+from .schemas import AgentSummary, FsTreeNode, MessageOut, SearchHit, SendMessageIn
 from .security import sign_agent_callback
 from .slack import notify_approval
+
+# Each agent's general (non-project) corpus root in the document store.
+_GENERAL_ROOTS = {"engineering": filestore.ENGINEERING_ROOT}
 
 
 @dataclass(frozen=True)
@@ -109,6 +125,93 @@ def _find_conversation(
     return db.scalar(stmt)
 
 
+@router.get("/{agent_id}/tree", response_model=FsTreeNode)
+def agent_tree(
+    agent_id: str,
+    user: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> dict:
+    """The filesystem the agent can reach: its general reference corpus plus
+    every project tree the requesting user shares with it."""
+    agent = _require_agent(agent_id)
+    children: list[dict] = []
+
+    general = _GENERAL_ROOTS.get(agent_id)
+    if general is not None and general.exists():
+        children.append(projectstore.build_tree(general, "reference"))
+
+    projects = db.scalars(
+        select(Project)
+        .distinct()
+        .join(ProjectMember, ProjectMember.project_id == Project.id)
+        .join(ProjectAgent, ProjectAgent.project_id == Project.id)
+        .where(
+            ProjectMember.user_id == user.id,
+            ProjectAgent.agent_id == agent_id,
+            Project.archived.is_(False),
+        )
+        .order_by(Project.name)
+    )
+    proj_children = [
+        projectstore.build_tree(projectstore.project_dir(p.slug), p.name)
+        for p in projects
+        if projectstore.project_dir(p.slug).exists()
+    ]
+    children.append({"name": "projects", "children": proj_children})
+
+    return {"name": agent.name, "children": children}
+
+
+@router.get("/{agent_id}/search", response_model=list[SearchHit])
+def search_agent(
+    agent_id: str,
+    q: str,
+    semantic: bool = False,
+    user: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> list[dict]:
+    """Search the agent's general reference corpus (function-level files).
+    Project files are searched via the project-scoped endpoint."""
+    _require_agent(agent_id)
+    query = q.strip()
+    if not query:
+        return []
+    if semantic:
+        hits = docstore.search(
+            query, container_kind="function", function=agent_id, k=20
+        )
+        ids = [uuid.UUID(h.catalog_id) for h in hits if h.catalog_id]
+        types = dict(
+            db.execute(select(Catalog.id, Catalog.type).where(Catalog.id.in_(ids))).all()
+        ) if ids else {}
+        return [
+            {
+                "id": h.catalog_id, "path": h.path, "title": h.title,
+                "type": types.get(uuid.UUID(h.catalog_id), "other"),
+                "snippet": h.text[:200], "score": h.score, "mode": "semantic",
+            }
+            for h in hits if h.catalog_id
+        ]
+    rows = db.execute(
+        sqltext(
+            "SELECT id, path, title, type, "
+            "ts_headline('english', coalesce(extracted_text,''), "
+            " plainto_tsquery('english', :q), "
+            " 'MaxFragments=1,MaxWords=22,MinWords=6,ShortWord=2') AS snippet "
+            "FROM catalog "
+            "WHERE container_kind = 'function' AND function = :fn "
+            " AND tsv @@ plainto_tsquery('english', :q) "
+            "ORDER BY ts_rank(tsv, plainto_tsquery('english', :q)) DESC LIMIT 25"
+        ),
+        {"q": query, "fn": agent_id},
+    ).all()
+    return [
+        {"id": r.id, "path": r.path, "title": r.title, "type": r.type,
+         "snippet": r.snippet, "score": None, "mode": "keyword"}
+        for r in rows
+    ]
+
+
 @router.get("/{agent_id}/messages", response_model=list[MessageOut])
 def get_messages(
     agent_id: str,
@@ -118,7 +221,7 @@ def get_messages(
 ) -> list[Message]:
     _require_agent(agent_id)
     if project_id is not None:
-        require_membership(project_id, user, db)
+        get_container(project_id, user, db)
     conv = _find_conversation(db, user, agent_id, project_id)
     return list(conv.messages) if conv else []
 
@@ -135,8 +238,7 @@ async def send_message(
     project_context: dict | None = None
     callback: AgentCallback | None = None
     if body.project_id is not None:
-        require_membership(body.project_id, user, db)
-        project = db.get(Project, body.project_id)
+        project = get_container(body.project_id, user, db)
         project_context = {
             "project_id": str(body.project_id),
             "project_name": project.name if project else None,

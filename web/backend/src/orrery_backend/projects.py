@@ -10,24 +10,46 @@ import re
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    HTTPException,
+    UploadFile,
+    status,
+)
 from sqlalchemy import select
+from sqlalchemy import text as sqltext
 from sqlalchemy.orm import Session as DbSession
 
-from . import projectstore
+from orrery_lib import docstore
+
+from . import commit_path, functions, projectstore
 from .auth import current_user
 from .db import get_db
 from .models import (
+    Catalog,
     Project,
     ProjectAgent,
-    ProjectDocument,
     ProjectMember,
     ProjectMemberAgent,
     Task,
     User,
 )
 from .projectstore import create_project_tree
-from .schemas import ProjectIn, ProjectOut, TaskIn, TaskOut, TimelineNode
+from .schemas import (
+    ProjectIn,
+    ProjectOut,
+    SearchHit,
+    TaskIn,
+    TaskOut,
+    TimelineNode,
+)
+
+# Project files are cataloged under the engineering function for now (the
+# only agent). Cross-functional per-file function tagging arrives with streams.
+_PROJECT_FUNCTION = "engineering"
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -58,6 +80,20 @@ def require_membership(
     if membership is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "project not found")
     return membership
+
+
+def get_container(project_id: uuid.UUID, user: User, db: DbSession) -> Project:
+    """Return a container (project OR function_stream) the user can access, or
+    404. Projects gate on membership; streams gate on function-access."""
+    project = db.get(Project, project_id)
+    if project is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
+    if project.kind == "function_stream":
+        if not functions.can_access_function(user, project.function):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
+        return project
+    require_membership(project_id, user, db)
+    return project
 
 
 def _to_out(project: Project, role: str) -> ProjectOut:
@@ -106,13 +142,30 @@ def create_project(
 def list_projects(
     user: User = Depends(current_user), db: DbSession = Depends(get_db)
 ) -> list[ProjectOut]:
+    # Bounded projects the user is a member of …
     rows = db.execute(
         select(Project, ProjectMember.role)
         .join(ProjectMember, ProjectMember.project_id == Project.id)
-        .where(ProjectMember.user_id == user.id, Project.archived.is_(False))
+        .where(
+            ProjectMember.user_id == user.id,
+            Project.archived.is_(False),
+            Project.kind == "project",
+        )
         .order_by(Project.created_at.desc())
     ).all()
-    return [_to_out(project, role) for project, role in rows]
+    out = [_to_out(project, role) for project, role in rows]
+    # … plus the perpetual function streams the user can reach.
+    streams = db.scalars(
+        select(Project)
+        .where(
+            Project.kind == "function_stream",
+            Project.function.in_(functions.accessible_functions(user)),
+            Project.archived.is_(False),
+        )
+        .order_by(Project.name)
+    )
+    out.extend(_to_out(s, "member") for s in streams)
+    return out
 
 
 @router.get("/{project_id}", response_model=ProjectOut)
@@ -121,30 +174,32 @@ def get_project(
     user: User = Depends(current_user),
     db: DbSession = Depends(get_db),
 ) -> ProjectOut:
-    membership = require_membership(project_id, user, db)
-    project = db.get(Project, project_id)
-    assert project is not None
-    return _to_out(project, membership.role)
+    project = get_container(project_id, user, db)
+    role = "member"
+    if project.kind == "project":
+        membership = require_membership(project_id, user, db)
+        role = membership.role
+    return _to_out(project, role)
 
 
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 
 
-def _doc_node(doc: ProjectDocument) -> dict:
-    """Render a dropped document as a timeline node, dated by occurred_at."""
-    ext = doc.filename.rsplit(".", 1)[-1].lower() if "." in doc.filename else None
+def _doc_node(cat: Catalog) -> dict:
+    """Render a cataloged timeline file as a timeline node, dated by occurred_at."""
+    when = cat.occurred_at or cat.created_at
     return {
-        "id": f"doc:{doc.id}",
+        "id": f"doc:{cat.id}",
         "kind": "file",
-        "name": doc.title,
-        "time": int(doc.occurred_at.timestamp() * 1000),
-        "type": doc.type,
-        "ext": ext,
-        "path": doc.path,
-        "size": doc.size,
-        "desc": doc.description,
-        "batch": doc.source,
-        "attached": doc.source == "email",
+        "name": cat.title,
+        "time": int(when.timestamp() * 1000),
+        "type": cat.type,
+        "ext": cat.ext,
+        "path": cat.path,
+        "size": cat.size,
+        "desc": cat.description,
+        "batch": cat.source,
+        "attached": cat.type == "email",
         "status": None,
     }
 
@@ -155,17 +210,22 @@ def project_timeline(
     user: User = Depends(current_user),
     db: DbSession = Depends(get_db),
 ) -> list[dict]:
-    """Timeline nodes for a project: files (git-timestamped) + dropped
-    documents (dated by drop time / email Date) + tasks."""
-    require_membership(project_id, user, db)
-    project = db.get(Project, project_id)
-    assert project is not None
-    nodes: list[dict] = projectstore.project_files(project.slug)
+    """Timeline nodes for a container (project or function stream): files
+    (git-timestamped) + cataloged timeline events + tasks."""
+    container = get_container(project_id, user, db)
+    rel_root = (
+        container.function
+        if container.kind == "function_stream"
+        else f"projects/{container.slug}"
+    )
+    nodes: list[dict] = projectstore.folder_files(rel_root or "")
 
-    for doc in db.scalars(
-        select(ProjectDocument).where(ProjectDocument.project_id == project_id)
+    for cat in db.scalars(
+        select(Catalog).where(
+            Catalog.container_id == project_id, Catalog.on_timeline.is_(True)
+        )
     ):
-        nodes.append(_doc_node(doc))
+        nodes.append(_doc_node(cat))
 
     for t in db.scalars(select(Task).where(Task.project_id == project_id)):
         if t.due_date is not None:
@@ -203,12 +263,13 @@ def project_timeline(
 )
 async def upload_document(
     project_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     user: User = Depends(current_user),
     db: DbSession = Depends(get_db),
 ) -> dict:
-    """Record a dropped file on the project's timeline. Regular files are
-    dated now; .eml emails are dated by their sent/received header."""
+    """Drop a file onto the project's timeline (Tier 0/1 via commit_path).
+    Regular files are dated now; .eml emails by their sent/received header."""
     require_membership(project_id, user, db)
     project = db.get(Project, project_id)
     assert project is not None
@@ -226,35 +287,23 @@ async def upload_document(
     if ext == "eml":
         when, subject, sender = projectstore.parse_eml(data)
         occurred = when or datetime.now(timezone.utc)
-        node_type, source = "email", "email"
+        node_type = "email"
         title = (subject or filename).strip() or filename
         if sender:
             description = f"From {sender}"
     else:
         occurred = datetime.now(timezone.utc)
-        node_type, source = projectstore._type_for_ext(ext), "upload"
+        node_type = projectstore._type_for_ext(ext)
         title = filename
 
-    rel_path, stored_name = projectstore.save_upload(
-        project.slug, filename, data,
-        author_name=user.display_name, author_email=user.email,
+    cat = commit_path.add_file(
+        db, project=project, function=_PROJECT_FUNCTION, data=data,
+        filename=filename, file_type=node_type, ext=ext or None,
+        source="timeline_drop", uploader=user, title=title,
+        description=description, occurred_at=occurred, on_timeline=True,
+        background_tasks=background_tasks,
     )
-    doc = ProjectDocument(
-        project_id=project_id,
-        filename=stored_name,
-        path=rel_path,
-        title=title[:300],
-        type=node_type,
-        size=len(data),
-        occurred_at=occurred,
-        source=source,
-        description=description,
-        uploaded_by=user.id,
-    )
-    db.add(doc)
-    db.commit()
-    db.refresh(doc)
-    return _doc_node(doc)
+    return _doc_node(cat)
 
 
 @router.delete(
@@ -267,20 +316,75 @@ def delete_document(
     user: User = Depends(current_user),
     db: DbSession = Depends(get_db),
 ) -> None:
-    """Remove a dropped document from the timeline — deletes the stored file
-    (git-removed, history-recoverable) and the record."""
+    """Remove a cataloged file: git-remove the bytes, drop its embeddings and
+    catalog row (git history retains it)."""
     require_membership(project_id, user, db)
     project = db.get(Project, project_id)
-    doc = db.get(ProjectDocument, document_id)
-    if project is None or doc is None or doc.project_id != project_id:
+    cat = db.get(Catalog, document_id)
+    if project is None or cat is None or cat.container_id != project_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "document not found")
-    projectstore.delete_upload(
-        project.slug, doc.path,
-        author_name=user.display_name, author_email=user.email,
-    )
-    db.delete(doc)
-    db.commit()
+    commit_path.remove_file(db, cat, project=project, actor=user)
     return None
+
+
+@router.get("/{project_id}/search", response_model=list[SearchHit])
+def search_project(
+    project_id: uuid.UUID,
+    q: str,
+    semantic: bool = False,
+    user: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> list[dict]:
+    """Container-scoped file search. Keyword (Postgres FTS) always; semantic
+    (the `documents` collection) when toggled. No agent. A project scopes by
+    container_id; a function stream scopes by its function corpus."""
+    container = get_container(project_id, user, db)
+    query = q.strip()
+    if not query:
+        return []
+    is_stream = container.kind == "function_stream"
+
+    if semantic:
+        if is_stream:
+            hits = docstore.search(
+                query, container_kind="function", function=container.function, k=20
+            )
+        else:
+            hits = docstore.search(query, container_id=str(project_id), k=20)
+        ids = [uuid.UUID(h.catalog_id) for h in hits if h.catalog_id]
+        types = dict(
+            db.execute(select(Catalog.id, Catalog.type).where(Catalog.id.in_(ids))).all()
+        ) if ids else {}
+        return [
+            {
+                "id": h.catalog_id, "path": h.path, "title": h.title,
+                "type": types.get(uuid.UUID(h.catalog_id), "other"),
+                "snippet": h.text[:200], "score": h.score, "mode": "semantic",
+            }
+            for h in hits if h.catalog_id
+        ]
+
+    if is_stream:
+        where, params = "container_kind = 'function' AND function = :fn", {"q": query, "fn": container.function}
+    else:
+        where, params = "container_id = :pid", {"q": query, "pid": str(project_id)}
+    rows = db.execute(
+        sqltext(
+            "SELECT id, path, title, type, "
+            "ts_headline('english', coalesce(extracted_text,''), "
+            " plainto_tsquery('english', :q), "
+            " 'MaxFragments=1,MaxWords=22,MinWords=6,ShortWord=2') AS snippet "
+            "FROM catalog "
+            f"WHERE {where} AND tsv @@ plainto_tsquery('english', :q) "
+            "ORDER BY ts_rank(tsv, plainto_tsquery('english', :q)) DESC LIMIT 25"
+        ),
+        params,
+    ).all()
+    return [
+        {"id": r.id, "path": r.path, "title": r.title, "type": r.type,
+         "snippet": r.snippet, "score": None, "mode": "keyword"}
+        for r in rows
+    ]
 
 
 @router.get("/{project_id}/tasks", response_model=list[TaskOut])
