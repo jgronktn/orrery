@@ -4,7 +4,8 @@
 // state callbacks into React.
 import { useEffect, useRef, useState } from "react";
 
-import type { FsTreeNode } from "../api/client";
+import { api, type FsTreeNode } from "../api/client";
+import FilePreview from "./FilePreview";
 import {
   FsEngine,
   type Crumb,
@@ -43,6 +44,7 @@ export default function FsExplorer({
   const [crumbs, setCrumbs] = useState<Crumb[]>([]);
   const [selected, setSelected] = useState<SelectedFile | null>(null);
   const [counts, setCounts] = useState({ files: 0, folders: 0 });
+  const [preview, setPreview] = useState<{ path: string; name: string; ext: string } | null>(null);
 
   const engineRef = useRef<FsEngine | null>(null);
   if (!engineRef.current) {
@@ -189,7 +191,37 @@ export default function FsExplorer({
               <div style={{ color: "#9fb0ca", lineHeight: 1.55, wordBreak: "break-all", fontSize: 10.5 }}>{selected.path}</div>
             </div>
           </div>
+          {selected.storePath && (
+            <div className="mt-3.5 flex gap-2">
+              <button
+                onClick={() =>
+                  setPreview({ path: selected.storePath!, name: selected.name, ext: selected.ext })
+                }
+                className="flex-1 rounded-lg py-2 text-xs font-semibold"
+                style={{ border: `1px solid ${accent}55`, background: `${accent}1a`, color: accent, fontFamily: "'JetBrains Mono',monospace" }}
+              >
+                Preview
+              </button>
+              <a
+                href={api.fileRawUrl(selected.storePath)}
+                download={selected.name}
+                className="flex-1 rounded-lg py-2 text-center text-xs font-semibold"
+                style={{ border: "1px solid rgba(120,160,220,.22)", color: "#c4cee0", fontFamily: "'JetBrains Mono',monospace" }}
+              >
+                Download
+              </a>
+            </div>
+          )}
         </div>
+      )}
+
+      {preview && (
+        <FilePreview
+          path={preview.path}
+          name={preview.name}
+          ext={preview.ext}
+          onClose={() => setPreview(null)}
+        />
       )}
 
       <style>{"@keyframes atlasPulse{0%,100%{opacity:.55}50%{opacity:1}}"}</style>

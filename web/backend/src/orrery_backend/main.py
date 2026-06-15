@@ -11,6 +11,7 @@ from .approvals import router as approvals_router
 from .auth import router as auth_router
 from .config import settings
 from .db import SessionLocal
+from .files import router as files_router
 from .functions import provision_streams
 from .internal import router as internal_router
 from .projects import router as projects_router
@@ -48,3 +49,4 @@ app.include_router(projects_router)
 app.include_router(agents_router)
 app.include_router(approvals_router)
 app.include_router(internal_router)
+app.include_router(files_router)

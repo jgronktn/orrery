@@ -128,6 +128,15 @@ export const api = {
       `/api/projects/${projectId}/search?q=${encodeURIComponent(q)}` +
         (semantic ? "&semantic=true" : ""),
     ),
+
+  // File read access (preview + download). Raw is a same-origin URL usable
+  // directly as <img>/<iframe>/<a download> src; text is the extracted text.
+  fileRawUrl: (path: string) =>
+    `${BASE}/api/files/raw?path=${encodeURIComponent(path)}`,
+  fileText: (path: string) =>
+    request<{ text: string | null }>(
+      `/api/files/text?path=${encodeURIComponent(path)}`,
+    ),
   // Drop a file onto a project's timeline (.eml dated by its sent/received header)
   uploadDocument: (projectId: string, file: File) => {
     const fd = new FormData();

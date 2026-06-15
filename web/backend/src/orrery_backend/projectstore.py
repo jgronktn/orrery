@@ -73,6 +73,8 @@ def build_tree(path: Path, name: str) -> dict:
                 continue
             children.append(build_tree(child, child.name))
         node["children"] = children
+    else:
+        node["store_path"] = str(path.relative_to(filestore.FILES_ROOT))
     return node
 
 

@@ -18,6 +18,7 @@ export interface SelectedFile {
   ext: string;
   parent: string;
   path: string;
+  storePath: string | null; // FILES_ROOT-relative — for preview/download
 }
 export interface UiState {
   mode: Mode;
@@ -27,6 +28,7 @@ export interface UiState {
 export interface RawNode {
   name: string;
   children?: RawNode[] | null;
+  store_path?: string | null;
 }
 
 const COLORS: Record<string, string> = {
@@ -260,6 +262,7 @@ export class FsEngine {
         name: node.name, color: node.color, typeLabel: LABELS[node.type] ?? "File",
         ext: (node.ext || "—").toUpperCase(), parent: node.parent ? node.parent.name : "—",
         path: "/" + node.path.map((p: any) => p.name).join("/"),
+        storePath: node.store_path ?? null,
       },
     });
   }

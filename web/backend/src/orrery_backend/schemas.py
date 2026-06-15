@@ -151,6 +151,7 @@ class FsTreeNode(BaseModel):
 
     name: str
     children: "list[FsTreeNode] | None" = None
+    store_path: str | None = None  # FILES_ROOT-relative path (files only)
 
 
 class TimelineNode(BaseModel):
