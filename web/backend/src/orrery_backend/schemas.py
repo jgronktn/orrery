@@ -135,6 +135,21 @@ class ResearchLogOut(BaseModel):
 # ── Project timeline ────────────────────────────────────────────────
 
 
+class FileRenameIn(BaseModel):
+    path: str
+    new_name: str = Field(min_length=1, max_length=300)
+
+
+class FileMoveIn(BaseModel):
+    path: str
+    target_dir: str = ""  # a facet folder within the container ("" = root)
+
+
+class FileOpResult(BaseModel):
+    status: str  # done | queued
+    proposal_id: uuid.UUID | None = None
+
+
 class SearchHit(BaseModel):
     id: uuid.UUID
     path: str

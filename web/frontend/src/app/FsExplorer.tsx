@@ -4,7 +4,7 @@
 // state callbacks into React.
 import { useEffect, useRef, useState } from "react";
 
-import { api, type FsTreeNode } from "../api/client";
+import { api, ApiError, type FsTreeNode } from "../api/client";
 import FilePreview from "./FilePreview";
 import {
   FsEngine,
@@ -30,10 +30,12 @@ export default function FsExplorer({
   tree,
   accent = "#54c7ff",
   onClose,
+  onChanged,
 }: {
   tree: FsTreeNode;
   accent?: string;
   onClose: () => void;
+  onChanged?: () => void; // re-fetch the tree after a mutation
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<HTMLCanvasElement>(null);
@@ -70,13 +72,39 @@ export default function FsExplorer({
     setCounts({ files: engine.fileCount, folders: engine.folderCount });
     return () => engine.unmount();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [tree]); // re-mount with a fresh tree after a mutation
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  // Rename / move / delete the selected file through the governed file ops.
+  const fileOp = async (op: "rename" | "move" | "delete") => {
+    if (!selected?.storePath) return;
+    const path = selected.storePath;
+    try {
+      let res;
+      if (op === "delete") {
+        if (!window.confirm(`Delete "${selected.name}"? (recoverable via git)`)) return;
+        res = await api.deleteFile(path);
+      } else if (op === "rename") {
+        const nn = window.prompt("New name:", selected.name);
+        if (!nn || nn === selected.name) return;
+        res = await api.renameFile(path, nn);
+      } else {
+        const dir = window.prompt("Move to folder (e.g. specs, drafts; blank = root):", "");
+        if (dir === null) return;
+        res = await api.moveFile(path, dir.trim());
+      }
+      if (res.status === "queued") window.alert("Sent to the approval queue.");
+      engine.closeDetail();
+      onChanged?.();
+    } catch (e) {
+      window.alert(e instanceof ApiError ? e.message : "operation failed");
+    }
+  };
 
   const toggleBtn = (active: boolean): React.CSSProperties => ({
     padding: "7px 13px", border: "none", borderRadius: 8,
@@ -210,6 +238,13 @@ export default function FsExplorer({
               >
                 Download
               </a>
+            </div>
+          )}
+          {selected.storePath && (
+            <div className="mt-2 flex gap-2" style={{ fontFamily: "'JetBrains Mono',monospace" }}>
+              <button onClick={() => fileOp("rename")} className="flex-1 rounded-lg py-1.5 text-xs" style={{ border: "1px solid rgba(120,160,220,.2)", color: "#9aa7bd" }}>Rename</button>
+              <button onClick={() => fileOp("move")} className="flex-1 rounded-lg py-1.5 text-xs" style={{ border: "1px solid rgba(120,160,220,.2)", color: "#9aa7bd" }}>Move</button>
+              <button onClick={() => fileOp("delete")} className="flex-1 rounded-lg py-1.5 text-xs" style={{ border: "1px solid rgba(255,120,120,.3)", color: "#ff8a8a" }}>Delete</button>
             </div>
           )}
         </div>

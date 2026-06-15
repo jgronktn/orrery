@@ -20,6 +20,7 @@ export type ProposalRecord = components["schemas"]["ProposalOut"];
 export type TimelineNode = components["schemas"]["TimelineNode"];
 export type FsTreeNode = components["schemas"]["FsTreeNode"];
 export type SearchHit = components["schemas"]["SearchHit"];
+export type FileOpResult = components["schemas"]["FileOpResult"];
 
 export class ApiError extends Error {
   status: number;
@@ -137,6 +138,20 @@ export const api = {
     request<{ text: string | null }>(
       `/api/files/text?path=${encodeURIComponent(path)}`,
     ),
+  renameFile: (path: string, newName: string) =>
+    request<FileOpResult>("/api/files/rename", {
+      method: "POST",
+      body: JSON.stringify({ path, new_name: newName }),
+    }),
+  moveFile: (path: string, targetDir: string) =>
+    request<FileOpResult>("/api/files/move", {
+      method: "POST",
+      body: JSON.stringify({ path, target_dir: targetDir }),
+    }),
+  deleteFile: (path: string) =>
+    request<FileOpResult>(`/api/files?path=${encodeURIComponent(path)}`, {
+      method: "DELETE",
+    }),
   // Drop a file onto a project's timeline (.eml dated by its sent/received header)
   uploadDocument: (projectId: string, file: File) => {
     const fd = new FormData();

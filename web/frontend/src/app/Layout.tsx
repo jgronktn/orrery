@@ -55,7 +55,15 @@ export default function Layout() {
         <Workspace />
       </div>
 
-      {tree && <FsExplorer tree={tree} onClose={() => setTree(null)} />}
+      {tree && (
+        <FsExplorer
+          tree={tree}
+          onClose={() => setTree(null)}
+          onChanged={() => {
+            api.agentTree(AGENT_ID).then(setTree).catch(console.error);
+          }}
+        />
+      )}
     </div>
   );
 }

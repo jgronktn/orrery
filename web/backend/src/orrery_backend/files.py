@@ -16,13 +16,23 @@ from sqlalchemy.orm import Session as DbSession
 
 from orrery_lib import filestore
 
-from . import functions
+from . import commit_path, functions, projectstore
 from .auth import current_user
 from .db import get_db
-from .models import Catalog, User
+from .models import Catalog, Project, User
 from .projects import require_membership
+from .schemas import FileMoveIn, FileOpResult, FileRenameIn
 
 router = APIRouter(prefix="/api/files", tags=["files"])
+
+
+def _container_root(cat: Catalog, db: DbSession) -> tuple[str, set[str]]:
+    """The container's FILES_ROOT-relative folder + its allowed facet subdirs."""
+    if cat.container_kind == "project" and cat.container_id is not None:
+        project = db.get(Project, cat.container_id)
+        assert project is not None
+        return f"projects/{project.slug}", set(projectstore.PROJECT_FACETS)
+    return cat.function, set(functions.facets_for(cat.function))
 
 
 def _accessible_file(path: str, user: User, db: DbSession) -> Catalog:
@@ -75,3 +85,56 @@ def file_text(
     Null when the file type has no extractable text (e.g. images)."""
     cat = _accessible_file(path, user, db)
     return {"text": cat.extracted_text}
+
+
+@router.post("/rename", response_model=FileOpResult)
+def file_rename(
+    body: FileRenameIn,
+    user: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> dict:
+    cat = _accessible_file(body.path, user, db)
+    name = projectstore._safe_name(body.new_name)
+    parent = cat.path.rsplit("/", 1)[0]
+    dest = f"{parent}/{name}"
+    status_, rec = commit_path.route_file_op(
+        db, kind="file_rename", cat=cat, user=user, dest=dest,
+        summary=f"Rename {cat.title} → {name}",
+    )
+    return {"status": status_, "proposal_id": rec.id if rec else None}
+
+
+@router.post("/move", response_model=FileOpResult)
+def file_move(
+    body: FileMoveIn,
+    user: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> dict:
+    cat = _accessible_file(body.path, user, db)
+    root, allowed = _container_root(cat, db)
+    if body.target_dir and body.target_dir not in allowed:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "invalid destination folder")
+    name = cat.path.rsplit("/", 1)[-1]
+    dest = f"{root}/{body.target_dir}/{name}" if body.target_dir else f"{root}/{name}"
+    if dest == cat.path:
+        return {"status": "done", "proposal_id": None}
+    status_, rec = commit_path.route_file_op(
+        db, kind="file_move", cat=cat, user=user, dest=dest,
+        new_facet=body.target_dir or None,
+        summary=f"Move {cat.title} → {body.target_dir or '/'}",
+    )
+    return {"status": status_, "proposal_id": rec.id if rec else None}
+
+
+@router.delete("", response_model=FileOpResult)
+def file_delete(
+    path: str,
+    user: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> dict:
+    cat = _accessible_file(path, user, db)
+    status_, rec = commit_path.route_file_op(
+        db, kind="file_delete", cat=cat, user=user,
+        summary=f"Delete {cat.title}",
+    )
+    return {"status": status_, "proposal_id": rec.id if rec else None}

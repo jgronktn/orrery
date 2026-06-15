@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
 
+from . import commit_path
 from .agents import REGISTRY
 from .auth import current_user
 from .db import get_db
@@ -50,11 +51,22 @@ async def approve(
     db: DbSession = Depends(get_db),
 ) -> ProposalRecord:
     rec = _get_pending(db, user, proposal_id)
-    agent = REGISTRY.get(rec.agent_id)
-    if agent is None:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "unknown agent")
     rec.decided_by = user.id
-    await execute_proposal(db, rec, agent.url)  # sets executed | failed
+    if rec.kind in commit_path.FILE_OPS:
+        # Human file mutations are performed by the backend, not the agent.
+        try:
+            commit_path.execute_file_op(db, rec.kind, rec.payload)
+            rec.status = "executed"
+            rec.error = None
+        except Exception as exc:  # noqa: BLE001 - record failure on the row
+            rec.status = "failed"
+            rec.error = str(exc)
+        rec.decided_at = datetime.now(timezone.utc)
+    else:
+        agent = REGISTRY.get(rec.agent_id)
+        if agent is None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "unknown agent")
+        await execute_proposal(db, rec, agent.url)  # sets executed | failed
     db.commit()
     db.refresh(rec)
     return rec
