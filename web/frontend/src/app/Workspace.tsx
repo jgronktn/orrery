@@ -12,6 +12,7 @@ import Approvals from "./Approvals";
 import { ALL_PROJECTS } from "./constants";
 import Messages from "./Messages";
 import Projects from "./Projects";
+import SearchBox from "./SearchBox";
 import Tasks from "./Tasks";
 import Timeline from "./Timeline";
 
@@ -48,6 +49,8 @@ export default function Workspace() {
   // project — it has no conversation or task list of its own.
   const isProject = activeId !== null && activeId !== ALL_PROJECTS;
   const isAll = activeId === ALL_PROJECTS;
+  const activeContainer = projects.find((p) => p.id === activeId) ?? null;
+  const isStream = activeContainer?.kind === "function_stream";
 
   // Load the (persisted) conversation + tasks whenever the context changes.
   useEffect(() => {
@@ -61,7 +64,8 @@ export default function Workspace() {
       .getMessages(AGENT_ID, activeId)
       .then((m) => !cancelled && setMessages(m))
       .catch(console.error);
-    if (activeId) {
+    // Streams don't carry their own task list (this phase).
+    if (activeId && !isStream) {
       api
         .listTasks(activeId)
         .then((t) => !cancelled && setTasks(t))
@@ -72,7 +76,7 @@ export default function Workspace() {
     return () => {
       cancelled = true;
     };
-  }, [activeId, isAll]);
+  }, [activeId, isAll, isStream]);
 
   const createProject = async (name: string, description: string) => {
     const p = await api.createProject({ name, description: description || null });
@@ -173,7 +177,9 @@ export default function Workspace() {
           onCreate={createProject}
         />
 
-        {isProject && <Tasks tasks={tasks} onAdd={addTask} />}
+        {isProject && !isStream && <Tasks tasks={tasks} onAdd={addTask} />}
+
+        {isProject && <SearchBox projectId={activeId} key={activeId} />}
 
         {!isAll && (
         <form
@@ -211,14 +217,20 @@ export default function Workspace() {
       <div className="flex flex-col gap-4 min-h-0">
         {isAll ? (
           <main className="flex flex-1 flex-col gap-4 overflow-y-auto min-h-0">
-            {projects.map((p) => (
-              <Timeline key={p.id} activeId={p.id} projectName={p.name} />
-            ))}
+            {projects
+              .filter((p) => p.kind !== "function_stream")
+              .map((p) => (
+                <Timeline key={p.id} activeId={p.id} projectName={p.name} />
+              ))}
           </main>
         ) : (
           <>
             {isProject && (
-              <Timeline activeId={activeId} projectName={activeName} />
+              <Timeline
+                activeId={activeId}
+                projectName={activeName}
+                isStream={isStream}
+              />
             )}
             <main className="flex-1 rounded-xl border border-slate-200 bg-white p-6 overflow-y-auto min-h-0">
               <Messages

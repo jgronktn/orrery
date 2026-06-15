@@ -19,6 +19,7 @@ export type SendMessageIn = components["schemas"]["SendMessageIn"];
 export type ProposalRecord = components["schemas"]["ProposalOut"];
 export type TimelineNode = components["schemas"]["TimelineNode"];
 export type FsTreeNode = components["schemas"]["FsTreeNode"];
+export type SearchHit = components["schemas"]["SearchHit"];
 
 export class ApiError extends Error {
   status: number;
@@ -112,9 +113,21 @@ export const api = {
       method: "DELETE",
     }),
 
-  // Project timeline (files + action items)
-  projectTimeline: (projectId: string) =>
-    request<TimelineNode[]>(`/api/projects/${projectId}/timeline`),
+  // Project/stream timeline (files + action items), optional facet filter
+  projectTimeline: (projectId: string, facet?: string | null) =>
+    request<TimelineNode[]>(
+      `/api/projects/${projectId}/timeline` +
+        (facet ? `?facet=${encodeURIComponent(facet)}` : ""),
+    ),
+  // The container's controlled facet vocabulary (for filter chips)
+  projectFacets: (projectId: string) =>
+    request<string[]>(`/api/projects/${projectId}/facets`),
+  // Container-scoped file search (keyword always; semantic on toggle)
+  searchContainer: (projectId: string, q: string, semantic: boolean) =>
+    request<SearchHit[]>(
+      `/api/projects/${projectId}/search?q=${encodeURIComponent(q)}` +
+        (semantic ? "&semantic=true" : ""),
+    ),
   // Drop a file onto a project's timeline (.eml dated by its sent/received header)
   uploadDocument: (projectId: string, file: File) => {
     const fd = new FormData();

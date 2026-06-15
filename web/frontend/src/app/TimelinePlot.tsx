@@ -85,6 +85,9 @@ export default function TimelinePlot({
   variant,
   projectName,
   accent = "#54c7ff",
+  facets = [],
+  activeFacet = null,
+  onFacet,
   onExpand,
   onClose,
   onRemove,
@@ -93,6 +96,9 @@ export default function TimelinePlot({
   variant: "strip" | "full";
   projectName: string;
   accent?: string;
+  facets?: string[];
+  activeFacet?: string | null;
+  onFacet?: (f: string | null) => void;
   onExpand?: () => void;
   onClose?: () => void;
   onRemove?: (id: string) => void;
@@ -427,6 +433,29 @@ export default function TimelinePlot({
             <div className="flex flex-col gap-0.5" style={{ fontFamily: "'JetBrains Mono',monospace" }}>
               <div style={{ fontSize: 9.5, letterSpacing: ".18em", color: "#5b6a82" }}>VISIBLE&nbsp;WINDOW</div>
               <div ref={rangeRef} style={{ fontSize: 13, color: "#c8d2e4", letterSpacing: ".02em" }}>—</div>
+            </div>
+          )}
+          {facets.length > 0 && onFacet && (
+            <div className="flex flex-wrap items-center gap-1.5" style={{ fontFamily: "'JetBrains Mono',monospace" }}>
+              {[null, ...facets].map((f) => {
+                const active = activeFacet === f;
+                return (
+                  <button
+                    key={f ?? "all"}
+                    onClick={() => onFacet(f)}
+                    style={{
+                      padding: full ? "3px 10px" : "2px 8px", borderRadius: 999, cursor: "pointer",
+                      fontSize: full ? 11 : 10, letterSpacing: ".03em", whiteSpace: "nowrap",
+                      border: "1px solid " + (active ? accent : "rgba(120,160,220,.18)"),
+                      background: active ? accent : "rgba(10,16,28,.5)",
+                      color: active ? "#05080f" : "#9aa7bd",
+                      backdropFilter: "blur(8px)",
+                    }}
+                  >
+                    {f ?? "All"}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>

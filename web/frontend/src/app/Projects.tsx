@@ -37,6 +37,17 @@ export default function Projects({
     `w-full text-left rounded-lg px-3 py-2 text-sm ${
       active ? "bg-slate-800 text-white" : "hover:bg-slate-100 text-slate-700"
     }`;
+  const headerClass = (active: boolean) =>
+    `w-full text-left rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-wide ${
+      active ? "bg-slate-800 text-white" : "hover:bg-slate-100 text-slate-600"
+    }`;
+
+  // Organize by function: each stream is a clickable header; its projects nest
+  // beneath it. (Single-agent phase: all projects home to engineering. When
+  // more functions exist, nest by each project's primary function.)
+  const streams = projects.filter((p) => p.kind === "function_stream");
+  const projs = projects.filter((p) => p.kind !== "function_stream");
+  const homeStreamId = streams[0]?.id;
 
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-4 flex flex-col gap-2 min-h-0">
@@ -84,7 +95,7 @@ export default function Projects({
         >
           🌐 Global
         </button>
-        {projects.length > 0 && (
+        {projs.length > 0 && (
           <button
             className={itemClass(activeId === ALL_PROJECTS)}
             onClick={() => onSelect(ALL_PROJECTS)}
@@ -92,16 +103,45 @@ export default function Projects({
             🗂️ All projects
           </button>
         )}
-        {projects.map((p) => (
-          <button
-            key={p.id}
-            className={itemClass(activeId === p.id)}
-            onClick={() => onSelect(p.id)}
-            title={p.description ?? undefined}
-          >
-            {p.name}
-          </button>
-        ))}
+
+        {streams.map((s) => {
+          const nested = s.id === homeStreamId ? projs : [];
+          return (
+            <div key={s.id} className="mt-1 flex flex-col gap-1">
+              <button
+                className={headerClass(activeId === s.id)}
+                onClick={() => onSelect(s.id)}
+                title="Function stream"
+              >
+                {s.name}
+              </button>
+              {nested.map((p) => (
+                <button
+                  key={p.id}
+                  className={`${itemClass(activeId === p.id)} ml-3`}
+                  onClick={() => onSelect(p.id)}
+                  title={p.description ?? undefined}
+                >
+                  {p.name}
+                </button>
+              ))}
+            </div>
+          );
+        })}
+
+        {/* Fallback: projects with no stream yet (shouldn't happen once a
+            function is provisioned). */}
+        {streams.length === 0 &&
+          projs.map((p) => (
+            <button
+              key={p.id}
+              className={itemClass(activeId === p.id)}
+              onClick={() => onSelect(p.id)}
+              title={p.description ?? undefined}
+            >
+              {p.name}
+            </button>
+          ))}
         {projects.length === 0 && (
           <p className="px-3 py-1 text-xs text-slate-400">No projects yet.</p>
         )}

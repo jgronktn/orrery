@@ -10,15 +10,36 @@ import TimelinePlot from "./TimelinePlot";
 export default function Timeline({
   activeId,
   projectName,
+  isStream = false,
 }: {
   activeId: string | null;
   projectName: string;
+  isStream?: boolean;
 }) {
   const [nodes, setNodes] = useState<TimelineNode[]>([]);
   const [expanded, setExpanded] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [facets, setFacets] = useState<string[]>([]);
+  const [activeFacet, setActiveFacet] = useState<string | null>(null);
+
+  // Facet filter chips — loud in streams, absent in projects (note §7).
+  useEffect(() => {
+    setActiveFacet(null);
+    if (!activeId || !isStream) {
+      setFacets([]);
+      return;
+    }
+    let live = true;
+    api
+      .projectFacets(activeId)
+      .then((f) => live && setFacets(f))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [activeId, isStream]);
 
   const reload = useCallback(() => {
     if (!activeId) return;
@@ -138,6 +159,10 @@ export default function Timeline({
     );
   }
 
+  const shown = activeFacet
+    ? nodes.filter((n) => n.facet === activeFacet)
+    : nodes;
+
   return (
     <>
       <section
@@ -145,9 +170,12 @@ export default function Timeline({
         className="relative h-[200px] shrink-0 overflow-hidden rounded-xl border border-slate-800"
       >
         <TimelinePlot
-          nodes={nodes}
+          nodes={shown}
           variant="strip"
           projectName={projectName}
+          facets={facets}
+          activeFacet={activeFacet}
+          onFacet={setActiveFacet}
           onExpand={() => setExpanded(true)}
         />
         {overlayChrome}
@@ -156,9 +184,12 @@ export default function Timeline({
       {expanded && (
         <div {...dropHandlers} className="fixed inset-0 z-50">
           <TimelinePlot
-            nodes={nodes}
+            nodes={shown}
             variant="full"
             projectName={projectName}
+            facets={facets}
+            activeFacet={activeFacet}
+            onFacet={setActiveFacet}
             onClose={() => setExpanded(false)}
             onRemove={removeItem}
           />
