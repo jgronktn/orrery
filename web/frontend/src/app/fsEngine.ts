@@ -130,6 +130,10 @@ export class FsEngine {
           return a.name.localeCompare(b.name);
         });
         node.children.forEach((c: any) => walk(c, node, depth + 1, node.path));
+        // recursive descendant file count — distinguishes empty folders
+        node.fileCount = node.children.reduce(
+          (s: number, c: any) => s + (c.isFolder ? c.fileCount || 0 : 1), 0,
+        );
       } else { this.fileCount++; }
     };
     walk(root, null, 0, []);
@@ -445,16 +449,36 @@ export class FsEngine {
     vis.sort((a, b) => b._s.zc - a._s.zc);
     ctx.textBaseline = "middle";
     for (const n of vis) {
-      const s = n._s, rel = n._rel, a = alphaOf[rel] || 0.3; const isF = n.isFolder; const hov = this.hovered === n;
+      const s = n._s, rel = n._rel; const isF = n.isFolder; const hov = this.hovered === n;
+      // An empty folder (no descendant files) recedes — dimmed + hollow.
+      const empty = isF && !(n.fileCount > 0);
+      const a = (alphaOf[rel] || 0.3) * (empty ? 0.4 : 1);
       const r = isF ? Math.max(3, Math.min(22, s.scale * 7)) : Math.max(2, Math.min(11, s.scale * 4.6)); n._r = r;
-      ctx.save(); ctx.globalAlpha = a; ctx.shadowColor = n.color; ctx.shadowBlur = (isF ? 16 : 9) * (rel === "grand" ? 0.5 : 1);
+      ctx.save(); ctx.globalAlpha = a; ctx.shadowColor = n.color; ctx.shadowBlur = (isF ? 16 : 9) * (rel === "grand" ? 0.5 : 1) * (empty ? 0.3 : 1);
       if (isF) {
         ctx.fillStyle = "rgba(8,12,20,0.9)"; ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, 7); ctx.fill();
         ctx.lineWidth = Math.max(1, r * 0.16); ctx.strokeStyle = n.color; ctx.stroke(); ctx.shadowBlur = 0;
-        ctx.fillStyle = n.color; ctx.beginPath(); ctx.arc(s.x, s.y, r * 0.42, 0, 7); ctx.fill();
+        if (!empty) { ctx.fillStyle = n.color; ctx.beginPath(); ctx.arc(s.x, s.y, r * 0.42, 0, 7); ctx.fill(); }
       } else { ctx.fillStyle = n.color; ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, 7); ctx.fill(); }
       ctx.restore();
       if (hov) { ctx.save(); ctx.globalAlpha = 0.95; ctx.strokeStyle = "#eaf1fb"; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.arc(s.x, s.y, r + 5, 0, 7); ctx.stroke(); ctx.restore(); }
+      // file-count badge on non-empty folders (when zoomed in enough to read)
+      if (isF && n.fileCount > 0 && s.scale > 0.4) {
+        const label = n.fileCount > 99 ? "99+" : String(n.fileCount);
+        ctx.save();
+        ctx.font = "600 9px 'JetBrains Mono', monospace";
+        const w = ctx.measureText(label).width + 9;
+        const bx = s.x + r * 0.62, by = s.y - r * 0.62 - 6;
+        ctx.globalAlpha = alphaOf[rel] || 0.3;
+        ctx.beginPath();
+        if (typeof (ctx as { roundRect?: unknown }).roundRect === "function")
+          (ctx as unknown as { roundRect: (x: number, y: number, w: number, h: number, r: number) => void }).roundRect(bx, by, w, 12, 6);
+        else ctx.rect(bx, by, w, 12);
+        ctx.fillStyle = n.color; ctx.fill();
+        ctx.fillStyle = "#05080f"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(label, bx + w / 2, by + 6);
+        ctx.restore();
+      }
       if (n._pe) { n._pe.lw = 0; n._pe.lh = 0; }
     }
     const cands: any[] = [];
