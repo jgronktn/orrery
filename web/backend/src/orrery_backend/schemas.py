@@ -79,6 +79,7 @@ class TaskIn(BaseModel):
     description: str | None = None
     due_date: date | None = None
     kind: str = "task"  # task | milestone | reminder
+    facet: str | None = None
 
 
 class TaskOut(BaseModel):
@@ -89,6 +90,7 @@ class TaskOut(BaseModel):
     description: str | None = None
     status: str
     kind: str = "task"
+    facet: str | None = None
     owner_id: uuid.UUID | None = None
     due_date: date | None = None
     created_at: datetime
@@ -103,6 +105,7 @@ class AgentTaskIn(BaseModel):
     owner_id: uuid.UUID | None = None
     due_date: date | None = None
     kind: str = "task"  # task | milestone | reminder
+    facet: str | None = None
 
 
 class AgentTaskUpdate(BaseModel):
@@ -112,6 +115,7 @@ class AgentTaskUpdate(BaseModel):
     owner_id: uuid.UUID | None = None
     due_date: date | None = None
     kind: str | None = None
+    facet: str | None = None
 
 
 class LinkDocIn(BaseModel):
@@ -162,6 +166,7 @@ class TimelineNode(BaseModel):
     batch: str | None = None
     attached: bool = False
     status: str | None = None
+    facet: str | None = None
 
 
 # ── Conversation (persisted, keyed on user+agent+project) ───────────

@@ -27,15 +27,33 @@ class FunctionDef:
     name: str
     agent_id: str | None  # the function's implicit stream agent
     folder: str  # folder home in the document store (relative to FILES_ROOT)
+    facets: tuple[str, ...] = ()  # controlled sub-function vocabulary (1:1 with subfolders)
 
 
+# Controlled facet vocabulary per function, in git. Facets are filterable
+# sub-functions on the timeline, NOT containers — they map 1:1 to the function
+# folder's subdivisions. Lopsided by design (engineering light, corporate heavy).
+#
+# Graduation test (note §6): one stream = one agent = one permission boundary.
+# A sub-function stays a *facet* only while it shares its parent's agent AND
+# permission boundary. The moment it needs a distinct agent OR a distinct
+# permission boundary, it graduates to its own function_stream. (Solo founder
+# today: nothing graduates.)
 FUNCTIONS: dict[str, FunctionDef] = {
-    "engineering": FunctionDef("engineering", "Engineering", "engineering", "engineering"),
+    "engineering": FunctionDef(
+        "engineering", "Engineering", "engineering", "engineering",
+        facets=("specs", "drafts", "templates", "design-docs", "certifications", "contractors", "archive"),
+    ),
     # Declared for forward reference; provisioned when their agent ships:
-    #   "bookkeeping": FunctionDef("bookkeeping", "Bookkeeping", "bookkeeping", "bookkeeping"),
-    #   "corporate":   FunctionDef("corporate", "Corporate", "corporate", "corporate"),
-    #   "marketing":   FunctionDef("marketing", "Marketing", "marketing", "marketing"),
+    #   "bookkeeping": FunctionDef(..., facets=()),                 # the ledger
+    #   "corporate":   FunctionDef(..., facets=("ip","financing","governance","contracts")),
+    #   "marketing":   FunctionDef(...),
 }
+
+
+def facets_for(function: str | None) -> list[str]:
+    f = FUNCTIONS.get(function or "")
+    return list(f.facets) if f else []
 
 # Functions with a live agent + an auto-provisioned stream today.
 ACTIVE_FUNCTIONS: tuple[str, ...] = ("engineering",)

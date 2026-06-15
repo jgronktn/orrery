@@ -157,6 +157,8 @@ class Task(Base):
     kind: Mapped[str] = mapped_column(
         String(20), default="task", server_default="task"
     )
+    # Sub-function facet (non-file activity). Set explicitly; defaults unset.
+    facet: Mapped[str | None] = mapped_column(String(50), nullable=True)
     owner_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id"), nullable=True
     )

@@ -201,17 +201,33 @@ def _doc_node(cat: Catalog) -> dict:
         "batch": cat.source,
         "attached": cat.type == "email",
         "status": None,
+        "facet": cat.sub_function,
     }
+
+
+@router.get("/{project_id}/facets", response_model=list[str])
+def project_facets(
+    project_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> list[str]:
+    """The container's controlled facet vocabulary (for filter chips)."""
+    container = get_container(project_id, user, db)
+    if container.kind == "function_stream":
+        return functions.facets_for(container.function)
+    return list(projectstore.PROJECT_FACETS)
 
 
 @router.get("/{project_id}/timeline", response_model=list[TimelineNode])
 def project_timeline(
     project_id: uuid.UUID,
+    facet: str | None = None,
     user: User = Depends(current_user),
     db: DbSession = Depends(get_db),
 ) -> list[dict]:
     """Timeline nodes for a container (project or function stream): files
-    (git-timestamped) + cataloged timeline events + tasks."""
+    (git-timestamped) + cataloged timeline events + tasks. Optionally filtered
+    to one facet (sub-function)."""
     container = get_container(project_id, user, db)
     rel_root = (
         container.function
@@ -249,9 +265,12 @@ def project_timeline(
                 "batch": None,
                 "attached": len(t.documents) > 0,
                 "status": t.status,
+                "facet": t.facet,
             }
         )
 
+    if facet:
+        nodes = [n for n in nodes if n.get("facet") == facet]
     nodes.sort(key=lambda n: n["time"])
     return nodes
 
@@ -419,6 +438,7 @@ def create_task(
         description=body.description,
         due_date=body.due_date,
         kind=body.kind,
+        facet=body.facet,
         created_by=user.id,
     )
     db.add(task)

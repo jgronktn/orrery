@@ -108,6 +108,7 @@ def create_task(
         owner_id=body.owner_id,
         due_date=body.due_date,
         kind=body.kind,
+        facet=body.facet,
         created_by=ctx.user.id,
     )
     db.add(task)
@@ -131,7 +132,7 @@ def update_task(
     db: DbSession = Depends(get_db),
 ) -> Task:
     task = _get_project_task(db, ctx, task_id)
-    for field in ("title", "description", "status", "owner_id", "due_date", "kind"):
+    for field in ("title", "description", "status", "owner_id", "due_date", "kind", "facet"):
         value = getattr(body, field)
         if value is not None:
             setattr(task, field, value)

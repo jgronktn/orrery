@@ -39,9 +39,11 @@ def _scan_dir(db, root: Path, *, container_kind: str, container_id, function: st
         ext = p.suffix.lstrip(".").lower() or None
         text = filestore.extract_text(p)
         now = datetime.now(timezone.utc)
+        facet = projectstore.facet_from_relparts(p.relative_to(root).parts)
         cat = Catalog(
             path=rel, container_kind=container_kind, container_id=container_id,
-            function=function, type=projectstore._type_for_ext(ext or ""), ext=ext,
+            function=function, sub_function=facet,
+            type=projectstore._type_for_ext(ext or ""), ext=ext,
             size=p.stat().st_size, sha256=hashlib.sha256(data).hexdigest(),
             source="scan", uploader_id=None, title=p.name,
             occurred_at=None, on_timeline=False,
@@ -79,5 +81,26 @@ def scan_store() -> int:
         db.close()
 
 
+def backfill_facets() -> int:
+    """Recompute sub_function (facet) for existing catalog rows from their
+    folder path. One-time after the faceting change."""
+    db = SessionLocal()
+    try:
+        n = 0
+        for cat in db.scalars(select(Catalog)):
+            parts = cat.path.split("/")
+            rel = parts[2:] if cat.container_kind == "project" else parts[1:]
+            facet = projectstore.facet_from_relparts(tuple(rel))
+            if cat.sub_function != facet:
+                cat.sub_function = facet
+                n += 1
+        db.commit()
+        print(f"backfilled facet on {n} catalog rows")
+        return n
+    finally:
+        db.close()
+
+
 if __name__ == "__main__":
     scan_store()
+    backfill_facets()

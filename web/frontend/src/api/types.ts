@@ -161,6 +161,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/facets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Project Facets
+         * @description The container's controlled facet vocabulary (for filter chips).
+         */
+        get: operations["project_facets_api_projects__project_id__facets_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/timeline": {
         parameters: {
             query?: never;
@@ -171,7 +191,8 @@ export interface paths {
         /**
          * Project Timeline
          * @description Timeline nodes for a container (project or function stream): files
-         *     (git-timestamped) + cataloged timeline events + tasks.
+         *     (git-timestamped) + cataloged timeline events + tasks. Optionally filtered
+         *     to one facet (sub-function).
          */
         get: operations["project_timeline_api_projects__project_id__timeline_get"];
         put?: never;
@@ -581,6 +602,8 @@ export interface components {
              * @default task
              */
             kind: string;
+            /** Facet */
+            facet?: string | null;
         };
         /** AgentTaskUpdate */
         AgentTaskUpdate: {
@@ -596,6 +619,8 @@ export interface components {
             due_date?: string | null;
             /** Kind */
             kind?: string | null;
+            /** Facet */
+            facet?: string | null;
         };
         /**
          * Artifact
@@ -857,6 +882,8 @@ export interface components {
              * @default task
              */
             kind: string;
+            /** Facet */
+            facet?: string | null;
         };
         /** TaskOut */
         TaskOut: {
@@ -876,6 +903,8 @@ export interface components {
              * @default task
              */
             kind: string;
+            /** Facet */
+            facet?: string | null;
             /** Owner Id */
             owner_id?: string | null;
             /** Due Date */
@@ -915,6 +944,8 @@ export interface components {
             attached: boolean;
             /** Status */
             status?: string | null;
+            /** Facet */
+            facet?: string | null;
         };
         /** UserOut */
         UserOut: {
@@ -1238,9 +1269,42 @@ export interface operations {
             };
         };
     };
-    project_timeline_api_projects__project_id__timeline_get: {
+    project_facets_api_projects__project_id__facets_get: {
         parameters: {
             query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    project_timeline_api_projects__project_id__timeline_get: {
+        parameters: {
+            query?: {
+                facet?: string | null;
+            };
             header?: never;
             path: {
                 project_id: string;

@@ -111,6 +111,18 @@ def create_project_tree(
         )
 
 
+# A project's facet vocabulary = its cross-functional area subfolders.
+PROJECT_FACETS = tuple(SUBDIRS)
+
+
+def facet_from_relparts(parts) -> str | None:
+    """Facet = the first subfolder under the container root (a nested file).
+    Files at the root, or catalog-managed drops in attachments/, have none."""
+    if len(parts) > 1 and parts[0] != "attachments":
+        return parts[0]
+    return None
+
+
 def project_files(slug: str) -> list[dict]:
     """Timeline file-nodes for a project folder (projects/<slug>/)."""
     return folder_files(f"projects/{slug}")
@@ -148,7 +160,8 @@ def folder_files(rel_root: str) -> list[dict]:
             continue
         # Dropped attachments are represented by the project_documents table
         # (with their own timeline date), so skip them in the git scan.
-        if p.relative_to(root).parts[0] == "attachments":
+        relparts = p.relative_to(root).parts
+        if relparts[0] == "attachments":
             continue
         rel = str(p.relative_to(filestore.FILES_ROOT))
         ext = p.suffix.lstrip(".").lower()
@@ -171,6 +184,7 @@ def folder_files(rel_root: str) -> list[dict]:
                 "batch": batch,
                 "attached": False,
                 "status": None,
+                "facet": facet_from_relparts(relparts),
             }
         )
     return nodes
