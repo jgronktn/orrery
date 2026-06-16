@@ -5,6 +5,7 @@
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 
 import type { TimelineNode } from "../api/client";
+import TaskAttachments from "./TaskAttachments";
 
 const COLORS: Record<string, string> = {
   code: "#54c7ff",
@@ -65,6 +66,9 @@ const fmtSpan = (ms: number) => {
 };
 const SCALE = (() => { const S = 1000, M = 60 * S, H = 60 * M, D = 24 * H;
   return [S, 2*S, 5*S, 10*S, 15*S, 30*S, M, 2*M, 5*M, 10*M, 15*M, 30*M, H, 2*H, 3*H, 6*H, 12*H, D, 2*D, 7*D, 14*D, 30*D]; })();
+// The first http(s) URL in a note (stops at whitespace/newline), so a URL
+// followed by extra text still yields a clean, valid link.
+const firstUrl = (s: string | null): string | null => s?.match(/https?:\/\/\S+/i)?.[0] ?? null;
 const niceStep = (pxPerMs: number): number => { const want = 150 / pxPerMs; for (const s of SCALE) if (s >= want) return s; return SCALE[SCALE.length - 1]!; };
 
 interface RNode extends TimelineNode {
@@ -77,7 +81,7 @@ interface Selected {
   id: string; removable: boolean;
   name: string; desc: string | null; color: string; typeLabel: string;
   ext: string; size: string; time: string; date: string; batch: string;
-  attached: string; kind: string; status: string | null;
+  attached: string; kind: string; status: string | null; note: string | null;
 }
 
 export default function TimelinePlot({
@@ -91,6 +95,10 @@ export default function TimelinePlot({
   onExpand,
   onClose,
   onRemove,
+  onSetNote,
+  initialSelectedId = null,
+  projectId,
+  onAttachmentsChanged,
 }: {
   nodes: TimelineNode[];
   variant: "strip" | "full";
@@ -99,9 +107,13 @@ export default function TimelinePlot({
   facets?: string[];
   activeFacet?: string | null;
   onFacet?: (f: string | null) => void;
-  onExpand?: () => void;
+  onExpand?: (id?: string | null) => void;
   onClose?: () => void;
   onRemove?: (id: string) => void;
+  onSetNote?: (id: string, note: string | null) => void;
+  initialSelectedId?: string | null;
+  projectId?: string;
+  onAttachmentsChanged?: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -109,6 +121,20 @@ export default function TimelinePlot({
   const rangeRef = useRef<HTMLDivElement>(null);
   const zoomRef = useRef<HTMLSpanElement>(null);
   const [selected, setSelected] = useState<Selected | null>(null);
+  const [noteDraft, setNoteDraft] = useState("");
+  useEffect(() => setNoteDraft(selected?.note ?? ""), [selected]);
+
+  const selectNode = (hit: RNode) => {
+    setSelected({
+      id: hit.id,
+      removable: hit.id.startsWith("doc:") || hit.id.startsWith("task:"),
+      name: hit.name, desc: hit.desc ?? null, color: hit.color, typeLabel: LABELS[hit.type] ?? "File",
+      ext: (hit.ext || "—").toUpperCase(), size: fmtSize(hit.size),
+      time: fmtTimeS(hit.time), date: fmtDate(hit.time),
+      batch: hit.batch ? "#" + hit.batch : "—", attached: hit.attached ? "yes" : "—",
+      kind: hit.kind, status: hit.status ?? null, note: hit.note ?? null,
+    });
+  };
 
   // Mutable engine state (never triggers React re-render).
   const eng = useRef({
@@ -224,20 +250,13 @@ export default function TimelinePlot({
     const onUp = (e: PointerEvent) => {
       if (!eng.dragging) return; eng.dragging = false; c.style.cursor = "grab";
       if (eng.moved < 5) {
-        if (variant === "strip") { onExpand?.(); return; }
         const rect = cont.getBoundingClientRect();
         const hit = pick(e.clientX - rect.left, e.clientY - rect.top);
-        if (hit) {
-          setSelected({
-            id: hit.id,
-            removable: hit.id.startsWith("doc:") || hit.id.startsWith("task:"),
-            name: hit.name, desc: hit.desc ?? null, color: hit.color, typeLabel: LABELS[hit.type] ?? "File",
-            ext: (hit.ext || "—").toUpperCase(), size: fmtSize(hit.size),
-            time: fmtTimeS(hit.time), date: fmtDate(hit.time),
-            batch: hit.batch ? "#" + hit.batch : "—", attached: hit.attached ? "yes" : "—",
-            kind: hit.kind, status: hit.status ?? null,
-          });
-        } else setSelected(null);
+        // Strip: a click expands — carrying which item was hit so the full
+        // view opens with it selected.
+        if (variant === "strip") { onExpand?.(hit ? hit.id : null); return; }
+        if (hit) selectNode(hit);
+        else setSelected(null);
       }
     };
     const onWheel = (e: WheelEvent) => { e.preventDefault(); zoomBy(Math.exp(-e.deltaY * 0.0012), eng.mx); };
@@ -402,6 +421,18 @@ export default function TimelinePlot({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [variant]);
 
+  // Pre-select + fly to an item the user clicked on the collapsed strip.
+  useEffect(() => {
+    if (!initialSelectedId) return;
+    const n = eng.rnodes.find((r) => r.id === initialSelectedId);
+    if (!n) return;
+    selectNode(n);
+    const W = eng.W || 1280;
+    eng.camT.center = n.time;
+    eng.camT.pxPerMs = Math.min(eng.maxPx, W / (3.5 * 86400000));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialSelectedId, nodes]);
+
   const full = variant === "full";
   return (
     <div
@@ -468,7 +499,7 @@ export default function TimelinePlot({
             {full ? (
               <button onClick={onClose} title="Close" style={{ ...btn, color: "#c4cee0" }}>✕</button>
             ) : (
-              <button onClick={onExpand} title="Expand" style={{ ...btn, color: "#c4cee0", fontSize: 14 }}>⤢</button>
+              <button onClick={() => onExpand?.()} title="Expand" style={{ ...btn, color: "#c4cee0", fontSize: 14 }}>⤢</button>
             )}
           </div>
           {full && (
@@ -496,7 +527,7 @@ export default function TimelinePlot({
             drag <span style={{ color: "#8493ab" }}>pan time</span> · scroll <span style={{ color: "#8493ab" }}>zoom</span> · click <span style={{ color: "#8493ab" }}>an item</span>
           </div>
           {selected && (
-            <div className="absolute z-[25]" style={{ right: 22, top: 84, width: 268, padding: 18, border: "1px solid rgba(120,160,220,.18)", borderRadius: 14, background: "rgba(8,12,21,.82)", backdropFilter: "blur(12px)", boxShadow: "0 24px 60px rgba(0,0,0,.5)" }}>
+            <div className="absolute z-[25] overflow-y-auto" style={{ right: 22, top: 84, width: 360, maxHeight: "calc(100vh - 120px)", padding: 20, border: "1px solid rgba(120,160,220,.18)", borderRadius: 14, background: "rgba(8,12,21,.86)", backdropFilter: "blur(12px)", boxShadow: "0 24px 60px rgba(0,0,0,.5)" }}>
               <div className="mb-3.5 flex items-start justify-between">
                 <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 9.5, letterSpacing: ".18em", color: "#5b6a82" }}>SELECTED</span>
                 <button onClick={() => setSelected(null)} style={{ border: "none", background: "none", color: "#5b6a82", cursor: "pointer", fontSize: 15 }}>✕</button>
@@ -515,6 +546,48 @@ export default function TimelinePlot({
                 <Row k="date" v={selected.date} />
                 {selected.kind === "file" && <Row k="commit" v={selected.batch} vColor="#9fb0ca" />}
               </div>
+              {selected.kind === "task" && projectId && (
+                <TaskAttachments
+                  projectId={projectId}
+                  taskId={selected.id.slice(5)}
+                  accent={accent}
+                  onChange={onAttachmentsChanged}
+                />
+              )}
+              {onSetNote && (
+                <div className="mt-4" style={{ borderTop: "1px solid rgba(120,160,220,.12)", paddingTop: 13, fontFamily: "'JetBrains Mono',monospace" }}>
+                  <div style={{ fontSize: 9.5, letterSpacing: ".18em", color: "#5b6a82", marginBottom: 8 }}>NOTE / URL</div>
+                  {(() => {
+                    const u = firstUrl(selected.note);
+                    return u ? (
+                      <a href={u} target="_blank" rel="noreferrer"
+                        className="mb-2 block break-all" style={{ fontSize: 11, lineHeight: 1.45, color: accent }} title={u}>
+                        ↗ {u}
+                      </a>
+                    ) : null;
+                  })()}
+                  <textarea
+                    value={noteDraft}
+                    onChange={(e) => setNoteDraft(e.target.value)}
+                    placeholder="https://…  or a note"
+                    rows={4}
+                    className="w-full rounded-lg px-2.5 py-2"
+                    style={{ background: "rgba(10,16,28,.6)", border: "1px solid rgba(120,160,220,.2)", color: "#dce3ef", fontSize: 12, lineHeight: 1.55, resize: "vertical", minHeight: 84 }}
+                  />
+                  <button
+                    onClick={() => {
+                      const v = noteDraft.trim() || null;
+                      onSetNote(selected.id, v);
+                      setSelected((s) => (s ? { ...s, note: v } : s));
+                    }}
+                    disabled={noteDraft === (selected.note ?? "")}
+                    className="mt-2 w-full rounded-lg py-2 text-xs font-semibold disabled:opacity-40"
+                    style={{ border: `1px solid ${accent}55`, background: `${accent}1a`, color: accent }}
+                  >
+                    Save note
+                  </button>
+                </div>
+              )}
               {onRemove && selected.removable && (
                 <button
                   onClick={() => {

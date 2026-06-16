@@ -150,6 +150,23 @@ class FileOpResult(BaseModel):
     proposal_id: uuid.UUID | None = None
 
 
+class TaskDocOut(BaseModel):
+    id: uuid.UUID
+    path: str  # FILES_ROOT-relative
+    name: str
+    type: str
+
+
+class ContainerFile(BaseModel):
+    path: str
+    name: str
+    type: str
+
+
+class TaskDocLinkIn(BaseModel):
+    path: str
+
+
 class SearchHit(BaseModel):
     id: uuid.UUID
     path: str
@@ -183,6 +200,12 @@ class TimelineNode(BaseModel):
     attached: bool = False
     status: str | None = None
     facet: str | None = None
+    note: str | None = None
+
+
+class TimelineNoteIn(BaseModel):
+    node_id: str  # task:<id> | doc:<id> | file:<path>
+    note: str | None = None
 
 
 # ── Conversation (persisted, keyed on user+agent+project) ───────────

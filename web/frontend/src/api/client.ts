@@ -21,6 +21,8 @@ export type TimelineNode = components["schemas"]["TimelineNode"];
 export type FsTreeNode = components["schemas"]["FsTreeNode"];
 export type SearchHit = components["schemas"]["SearchHit"];
 export type FileOpResult = components["schemas"]["FileOpResult"];
+export type TaskDoc = components["schemas"]["TaskDocOut"];
+export type ContainerFile = components["schemas"]["ContainerFile"];
 
 export class ApiError extends Error {
   status: number;
@@ -123,6 +125,12 @@ export const api = {
   // The container's controlled facet vocabulary (for filter chips)
   projectFacets: (projectId: string) =>
     request<string[]>(`/api/projects/${projectId}/facets`),
+  // Attach/clear a note (URL/text) on a timeline item (task:/doc:/file:)
+  setTimelineNote: (projectId: string, nodeId: string, note: string | null) =>
+    request<void>(`/api/projects/${projectId}/timeline/note`, {
+      method: "POST",
+      body: JSON.stringify({ node_id: nodeId, note }),
+    }),
   // Container-scoped file search (keyword always; semantic on toggle)
   searchContainer: (projectId: string, q: string, semantic: boolean) =>
     request<SearchHit[]>(
@@ -152,6 +160,30 @@ export const api = {
     request<FileOpResult>(`/api/files?path=${encodeURIComponent(path)}`, {
       method: "DELETE",
     }),
+
+  // Task (action-item) attachments
+  listTaskDocs: (projectId: string, taskId: string) =>
+    request<TaskDoc[]>(`/api/projects/${projectId}/tasks/${taskId}/documents`),
+  uploadTaskDoc: (projectId: string, taskId: string, file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request<TaskDoc>(
+      `/api/projects/${projectId}/tasks/${taskId}/documents`,
+      { method: "POST", body: fd },
+    );
+  },
+  linkTaskDoc: (projectId: string, taskId: string, path: string) =>
+    request<TaskDoc>(`/api/projects/${projectId}/tasks/${taskId}/documents/link`, {
+      method: "POST",
+      body: JSON.stringify({ path }),
+    }),
+  unlinkTaskDoc: (projectId: string, taskId: string, docId: string) =>
+    request<void>(
+      `/api/projects/${projectId}/tasks/${taskId}/documents/${docId}`,
+      { method: "DELETE" },
+    ),
+  listContainerFiles: (projectId: string) =>
+    request<ContainerFile[]>(`/api/projects/${projectId}/files`),
   // Drop a file onto a project's timeline (.eml dated by its sent/received header)
   uploadDocument: (projectId: string, file: File) => {
     const fd = new FormData();

@@ -35,16 +35,21 @@ from .models import (
     ProjectMember,
     ProjectMemberAgent,
     Task,
+    TaskDocument,
     User,
 )
 from .projectstore import create_project_tree
 from .schemas import (
+    ContainerFile,
     ProjectIn,
     ProjectOut,
     SearchHit,
+    TaskDocLinkIn,
+    TaskDocOut,
     TaskIn,
     TaskOut,
     TimelineNode,
+    TimelineNoteIn,
 )
 
 # Project files are cataloged under the engineering function for now (the
@@ -202,7 +207,26 @@ def _doc_node(cat: Catalog) -> dict:
         "attached": cat.type == "email",
         "status": None,
         "facet": cat.sub_function,
+        "note": cat.note,
     }
+
+
+def _catalog_note_map(db: DbSession, container: Project) -> dict[str, str]:
+    """{catalog path → note} for the container's files (notes only)."""
+    stmt = select(Catalog.path, Catalog.note).where(Catalog.note.is_not(None))
+    if container.kind == "function_stream":
+        stmt = stmt.where(
+            Catalog.container_kind == "function", Catalog.function == container.function
+        )
+    else:
+        stmt = stmt.where(Catalog.container_id == container.id)
+    return {p: n for p, n in db.execute(stmt).all()}
+
+
+def _catalog_in_container(cat: Catalog, container: Project) -> bool:
+    if container.kind == "function_stream":
+        return cat.container_kind == "function" and cat.function == container.function
+    return cat.container_id == container.id
 
 
 @router.get("/{project_id}/facets", response_model=list[str])
@@ -235,6 +259,9 @@ def project_timeline(
         else f"projects/{container.slug}"
     )
     nodes: list[dict] = projectstore.folder_files(rel_root or "")
+    note_map = _catalog_note_map(db, container)
+    for n in nodes:  # attach notes to native (git-scanned) file nodes
+        n["note"] = note_map.get(n["id"][5:])
 
     for cat in db.scalars(
         select(Catalog).where(
@@ -266,6 +293,7 @@ def project_timeline(
                 "attached": len(t.documents) > 0,
                 "status": t.status,
                 "facet": t.facet,
+                "note": t.note,
             }
         )
 
@@ -273,6 +301,40 @@ def project_timeline(
         nodes = [n for n in nodes if n.get("facet") == facet]
     nodes.sort(key=lambda n: n["time"])
     return nodes
+
+
+@router.post("/{project_id}/timeline/note", status_code=status.HTTP_204_NO_CONTENT)
+def set_timeline_note(
+    project_id: uuid.UUID,
+    body: TimelineNoteIn,
+    user: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> None:
+    """Attach/clear a note (URL/text) on a timeline item — action item
+    (task:<id>), dropped doc (doc:<id>), or file (file:<path>)."""
+    container = get_container(project_id, user, db)
+    nid = body.node_id
+    note = (body.note or "").strip() or None
+
+    if nid.startswith("task:"):
+        task = db.get(Task, uuid.UUID(nid[5:]))
+        if task is None or task.project_id != project_id:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "item not found")
+        task.note = note
+    elif nid.startswith("doc:"):
+        cat = db.get(Catalog, uuid.UUID(nid[4:]))
+        if cat is None or not _catalog_in_container(cat, container):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "item not found")
+        cat.note = note
+    elif nid.startswith("file:"):
+        cat = db.scalar(select(Catalog).where(Catalog.path == nid[5:]))
+        if cat is None or not _catalog_in_container(cat, container):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "item not found")
+        cat.note = note
+    else:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "bad node id")
+    db.commit()
+    return None
 
 
 @router.post(
@@ -465,3 +527,144 @@ def delete_task(
     db.delete(task)
     db.commit()
     return None
+
+
+# ── Task attachments (link files to an action item) ─────────────────
+
+
+def _require_task(project_id: uuid.UUID, task_id: uuid.UUID, db: DbSession) -> Task:
+    task = db.get(Task, task_id)
+    if task is None or task.project_id != project_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "task not found")
+    return task
+
+
+def _taskdoc_out(doc: TaskDocument, db: DbSession) -> dict:
+    typ = db.scalar(select(Catalog.type).where(Catalog.path == doc.doc_path))
+    return {
+        "id": doc.id, "path": doc.doc_path,
+        "name": doc.doc_path.rsplit("/", 1)[-1], "type": typ or "other",
+    }
+
+
+@router.get("/{project_id}/tasks/{task_id}/documents", response_model=list[TaskDocOut])
+def list_task_documents(
+    project_id: uuid.UUID,
+    task_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> list[dict]:
+    get_container(project_id, user, db)
+    task = _require_task(project_id, task_id, db)
+    return [_taskdoc_out(d, db) for d in task.documents]
+
+
+@router.post(
+    "/{project_id}/tasks/{task_id}/documents",
+    response_model=TaskDocOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_task_document(
+    project_id: uuid.UUID,
+    task_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    user: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> dict:
+    """Upload a new file and attach it to the action item (cataloged, not a
+    timeline event)."""
+    project = get_container(project_id, user, db)
+    task = _require_task(project_id, task_id, db)
+    data = await file.read()
+    if not data:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "empty file")
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "file too large (max 25 MB)")
+    filename = file.filename or "upload"
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    cat = commit_path.add_file(
+        db, project=project, function=_PROJECT_FUNCTION, data=data,
+        filename=filename, file_type=projectstore._type_for_ext(ext), ext=ext or None,
+        source="upload", uploader=user, title=filename,
+        on_timeline=False, background_tasks=background_tasks,
+    )
+    doc = TaskDocument(task_id=task.id, doc_path=cat.path)
+    db.add(doc)
+    db.commit()
+    db.refresh(doc)
+    return _taskdoc_out(doc, db)
+
+
+@router.post(
+    "/{project_id}/tasks/{task_id}/documents/link",
+    response_model=TaskDocOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def link_task_document(
+    project_id: uuid.UUID,
+    task_id: uuid.UUID,
+    body: TaskDocLinkIn,
+    user: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> dict:
+    """Attach an existing cataloged file (in this container) to the action item."""
+    container = get_container(project_id, user, db)
+    task = _require_task(project_id, task_id, db)
+    cat = db.scalar(select(Catalog).where(Catalog.path == body.path))
+    if cat is None or not _catalog_in_container(cat, container):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "file not found")
+    existing = db.scalar(
+        select(TaskDocument).where(
+            TaskDocument.task_id == task.id, TaskDocument.doc_path == cat.path
+        )
+    )
+    doc = existing or TaskDocument(task_id=task.id, doc_path=cat.path)
+    if existing is None:
+        db.add(doc)
+        db.commit()
+        db.refresh(doc)
+    return _taskdoc_out(doc, db)
+
+
+@router.delete(
+    "/{project_id}/tasks/{task_id}/documents/{doc_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def unlink_task_document(
+    project_id: uuid.UUID,
+    task_id: uuid.UUID,
+    doc_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> None:
+    """Detach a file from the action item (unlink only; the file stays)."""
+    get_container(project_id, user, db)
+    task = _require_task(project_id, task_id, db)
+    doc = db.get(TaskDocument, doc_id)
+    if doc is None or doc.task_id != task.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "attachment not found")
+    db.delete(doc)
+    db.commit()
+    return None
+
+
+@router.get("/{project_id}/files", response_model=list[ContainerFile])
+def list_container_files(
+    project_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> list[dict]:
+    """Flat list of the container's cataloged files (for the attach picker)."""
+    container = get_container(project_id, user, db)
+    stmt = select(Catalog).order_by(Catalog.path)
+    if container.kind == "function_stream":
+        stmt = stmt.where(
+            Catalog.container_kind == "function", Catalog.function == container.function
+        )
+    else:
+        stmt = stmt.where(Catalog.container_id == container.id)
+    return [
+        {"path": c.path, "name": c.path.rsplit("/", 1)[-1], "type": c.type}
+        for c in db.scalars(stmt)
+    ]

@@ -23,6 +23,7 @@ export default function Timeline({
   const [error, setError] = useState<string | null>(null);
   const [facets, setFacets] = useState<string[]>([]);
   const [activeFacet, setActiveFacet] = useState<string | null>(null);
+  const [pendingSelect, setPendingSelect] = useState<string | null>(null);
 
   // Facet filter chips — loud in streams, absent in projects (note §7).
   useEffect(() => {
@@ -109,6 +110,18 @@ export default function Timeline({
     }
   };
 
+  // Attach/clear a note (URL/text) on a timeline item.
+  const setNote = async (id: string, note: string | null) => {
+    if (!activeId) return;
+    setError(null);
+    try {
+      await api.setTimelineNote(activeId, id, note);
+      reload();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "couldn't save note");
+    }
+  };
+
   const dropHandlers = {
     onDragOver: (e: DragEvent) => {
       e.preventDefault();
@@ -176,7 +189,10 @@ export default function Timeline({
           facets={facets}
           activeFacet={activeFacet}
           onFacet={setActiveFacet}
-          onExpand={() => setExpanded(true)}
+          onExpand={(id) => {
+            setPendingSelect(id ?? null);
+            setExpanded(true);
+          }}
         />
         {overlayChrome}
       </section>
@@ -190,8 +206,12 @@ export default function Timeline({
             facets={facets}
             activeFacet={activeFacet}
             onFacet={setActiveFacet}
+            initialSelectedId={pendingSelect}
+            projectId={activeId ?? undefined}
+            onAttachmentsChanged={reload}
             onClose={() => setExpanded(false)}
             onRemove={removeItem}
+            onSetNote={setNote}
           />
           {overlayChrome}
         </div>

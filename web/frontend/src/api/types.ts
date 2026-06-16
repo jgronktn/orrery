@@ -203,6 +203,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/timeline/note": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set Timeline Note
+         * @description Attach/clear a note (URL/text) on a timeline item — action item
+         *     (task:<id>), dropped doc (doc:<id>), or file (file:<path>).
+         */
+        post: operations["set_timeline_note_api_projects__project_id__timeline_note_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/documents": {
         parameters: {
             query?: never;
@@ -300,6 +321,88 @@ export interface paths {
          * @description Remove an action item (task/milestone/reminder) from the project.
          */
         delete: operations["delete_task_api_projects__project_id__tasks__task_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/tasks/{task_id}/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Task Documents */
+        get: operations["list_task_documents_api_projects__project_id__tasks__task_id__documents_get"];
+        put?: never;
+        /**
+         * Upload Task Document
+         * @description Upload a new file and attach it to the action item (cataloged, not a
+         *     timeline event).
+         */
+        post: operations["upload_task_document_api_projects__project_id__tasks__task_id__documents_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/tasks/{task_id}/documents/link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Link Task Document
+         * @description Attach an existing cataloged file (in this container) to the action item.
+         */
+        post: operations["link_task_document_api_projects__project_id__tasks__task_id__documents_link_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/tasks/{task_id}/documents/{doc_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Unlink Task Document
+         * @description Detach a file from the action item (unlink only; the file stays).
+         */
+        delete: operations["unlink_task_document_api_projects__project_id__tasks__task_id__documents__doc_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Container Files
+         * @description Flat list of the container's cataloged files (for the attach picker).
+         */
+        get: operations["list_container_files_api_projects__project_id__files_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -735,6 +838,20 @@ export interface components {
             /** File */
             file: string;
         };
+        /** Body_upload_task_document_api_projects__project_id__tasks__task_id__documents_post */
+        Body_upload_task_document_api_projects__project_id__tasks__task_id__documents_post: {
+            /** File */
+            file: string;
+        };
+        /** ContainerFile */
+        ContainerFile: {
+            /** Path */
+            path: string;
+            /** Name */
+            name: string;
+            /** Type */
+            type: string;
+        };
         /**
          * ConversationTurn
          * @description One prior turn, as the backend stores/sends it (stateless agent).
@@ -987,6 +1104,25 @@ export interface components {
             /** Project Id */
             project_id?: string | null;
         };
+        /** TaskDocLinkIn */
+        TaskDocLinkIn: {
+            /** Path */
+            path: string;
+        };
+        /** TaskDocOut */
+        TaskDocOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Path */
+            path: string;
+            /** Name */
+            name: string;
+            /** Type */
+            type: string;
+        };
         /** TaskIn */
         TaskIn: {
             /** Title */
@@ -1064,6 +1200,15 @@ export interface components {
             status?: string | null;
             /** Facet */
             facet?: string | null;
+            /** Note */
+            note?: string | null;
+        };
+        /** TimelineNoteIn */
+        TimelineNoteIn: {
+            /** Node Id */
+            node_id: string;
+            /** Note */
+            note?: string | null;
         };
         /** UserOut */
         UserOut: {
@@ -1451,6 +1596,39 @@ export interface operations {
             };
         };
     };
+    set_timeline_note_api_projects__project_id__timeline_note_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimelineNoteIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     upload_document_api_projects__project_id__documents_post: {
         parameters: {
             query?: never;
@@ -1634,6 +1812,172 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_task_documents_api_projects__project_id__tasks__task_id__documents_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskDocOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_task_document_api_projects__project_id__tasks__task_id__documents_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_task_document_api_projects__project_id__tasks__task_id__documents_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskDocOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    link_task_document_api_projects__project_id__tasks__task_id__documents_link_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskDocLinkIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskDocOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unlink_task_document_api_projects__project_id__tasks__task_id__documents__doc_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                task_id: string;
+                doc_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_container_files_api_projects__project_id__files_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContainerFile"][];
+                };
             };
             /** @description Validation Error */
             422: {

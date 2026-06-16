@@ -159,6 +159,8 @@ class Task(Base):
     )
     # Sub-function facet (non-file activity). Set explicitly; defaults unset.
     facet: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # A free-text note / reference URL the user attaches on the timeline.
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
     owner_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id"), nullable=True
     )
@@ -353,6 +355,8 @@ class Catalog(Base):
     on_timeline: Mapped[bool] = mapped_column(Boolean, default=False)
     extracted_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     text_extracted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # A free-text note / reference URL the user attaches on the timeline.
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
