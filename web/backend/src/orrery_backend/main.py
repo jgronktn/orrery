@@ -12,7 +12,9 @@ from .auth import router as auth_router
 from .config import settings
 from .db import SessionLocal
 from .files import router as files_router
-from .functions import provision_streams
+from .functions import provision_folders, provision_streams
+from .functions_api import home_router
+from .functions_api import router as functions_router
 from .internal import router as internal_router
 from .projects import router as projects_router
 
@@ -27,6 +29,7 @@ def _provision() -> None:
     db = SessionLocal()
     try:
         provision_streams(db)
+        provision_folders()
     finally:
         db.close()
 
@@ -46,6 +49,8 @@ def health() -> dict:
 
 app.include_router(auth_router)
 app.include_router(projects_router)
+app.include_router(functions_router)
+app.include_router(home_router)
 app.include_router(agents_router)
 app.include_router(approvals_router)
 app.include_router(internal_router)

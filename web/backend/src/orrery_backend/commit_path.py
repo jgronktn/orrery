@@ -79,18 +79,29 @@ def add_file(
     on_timeline: bool = False,
     background_tasks: BackgroundTasks | None = None,
 ) -> Catalog:
-    """Catalog a file into a project container (Tier 0), then queue its embed."""
-    rel_in_project, _stored = projectstore.save_upload(
-        project.slug, filename, data,
+    """Catalog a file into a container (project OR function stream), Tier 0,
+    then queue its embed (Tier 1). A function stream saves into its function
+    folder (container_kind='function', container_id NULL); a project saves into
+    projects/<slug>/ (container_kind='project')."""
+    if project.kind == "function_stream":
+        rel_root = functions.FUNCTIONS[project.function].folder
+        ckind: str = "function"
+        cid: uuid.UUID | None = None
+        fn = project.function
+    else:
+        rel_root = f"projects/{project.slug}"
+        ckind, cid, fn = "project", project.id, function
+
+    rel_path, _name = projectstore.save_to(
+        rel_root, filename, data,
         author_name=uploader.display_name, author_email=uploader.email,
     )
-    rel_path = f"projects/{project.slug}/{rel_in_project}"
     text = filestore.extract_text(filestore.FILES_ROOT / rel_path)
     now = datetime.now(timezone.utc)
 
     cat = Catalog(
-        path=rel_path, container_kind="project", container_id=project.id,
-        function=function, type=file_type, ext=ext or None, size=len(data),
+        path=rel_path, container_kind=ckind, container_id=cid,
+        function=fn, type=file_type, ext=ext or None, size=len(data),
         sha256=hashlib.sha256(data).hexdigest(), source=source,
         uploader_id=uploader.id, title=title[:300], description=description,
         occurred_at=occurred_at, on_timeline=on_timeline,
@@ -104,22 +115,20 @@ def add_file(
         background_tasks.add_task(
             _embed, str(cat.id), text,
             {
-                "path": rel_path, "title": cat.title, "container_kind": "project",
-                "container_id": str(project.id), "function": function, "source": source,
+                "path": rel_path, "title": cat.title, "container_kind": ckind,
+                "container_id": str(cid) if cid else None, "function": fn, "source": source,
             },
         )
     return cat
 
 
-def remove_file(db: DbSession, cat: Catalog, *, project: Project, actor: User) -> None:
-    """Delete a cataloged file: git-remove the bytes, drop its embeddings, and
-    delete the row. Git history retains it (recoverable)."""
-    prefix = f"projects/{project.slug}/"
-    if cat.path.startswith(prefix):
-        projectstore.delete_upload(
-            project.slug, cat.path[len(prefix):],
-            author_name=actor.display_name, author_email=actor.email,
-        )
+def remove_file(db: DbSession, cat: Catalog, *, actor: User) -> None:
+    """Delete a cataloged file (project OR function): git-remove the bytes by
+    its store path, drop its embeddings, and delete the row. Git history retains
+    it (recoverable)."""
+    projectstore.delete_at(
+        cat.path, author_name=actor.display_name, author_email=actor.email
+    )
     docstore.delete_file(str(cat.id))
     db.delete(cat)
     db.commit()
@@ -162,6 +171,7 @@ def execute_file_op(db: DbSession, kind: str, payload: dict) -> None:
         cat.title = name
         cat.ext = ext
         cat.type = projectstore._type_for_ext(ext or "")
+        cat.synthesized = "pending"  # moved/renamed → re-digest next synthesis pass
         if "new_facet" in payload:
             cat.sub_function = payload["new_facet"]
         db.flush()

@@ -177,8 +177,25 @@ class SearchHit(BaseModel):
     mode: str  # keyword | semantic
 
 
+class FunctionOut(BaseModel):
+    key: str
+    name: str
+    folder: str
+    agent: str | None  # the occupying agent's id, or null
+    facets: list[str]
+    stream_id: uuid.UUID  # the function_stream project row (for project-scoped routes)
+    file_count: int
+    reminder_count: int
+    pending_count: int  # items added since last knowledge synthesis
+
+
+class CompanyOut(BaseModel):
+    name: str
+    tagline: str
+
+
 class FsTreeNode(BaseModel):
-    """A node in the agent's filesystem tree. Folders carry `children`
+    """A node in a container's filesystem tree. Folders carry `children`
     (possibly empty); files have it as null."""
 
     name: str
@@ -243,3 +260,12 @@ class ProposalOut(BaseModel):
     result: dict | None = None
     project_id: uuid.UUID | None = None
     created_at: datetime
+
+
+class HomeOut(BaseModel):
+    """Company Home read model — one round trip for the whole-company view."""
+
+    company: CompanyOut
+    functions: list[FunctionOut]
+    timeline: list[TimelineNode]  # union, most-recent-first
+    approvals: list[ProposalOut]  # all pending for the user

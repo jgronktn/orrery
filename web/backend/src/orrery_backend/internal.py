@@ -132,10 +132,14 @@ def update_task(
     db: DbSession = Depends(get_db),
 ) -> Task:
     task = _get_project_task(db, ctx, task_id)
+    changed = False
     for field in ("title", "description", "status", "owner_id", "due_date", "kind", "facet"):
         value = getattr(body, field)
         if value is not None:
             setattr(task, field, value)
+            changed = True
+    if changed:
+        task.synthesized = "pending"  # edited → re-digest next synthesis pass
     db.commit()
     db.refresh(task)
     return task

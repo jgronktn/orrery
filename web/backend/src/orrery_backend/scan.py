@@ -68,12 +68,16 @@ def scan_store() -> int:
     try:
         total = _scan_dir(
             db, filestore.ENGINEERING_ROOT,
-            container_kind="function", container_id=None, function="engineering",
+            container_kind="function", container_id=None, function="engr",
         )
-        for proj in db.scalars(select(Project).where(Project.archived.is_(False))):
+        for proj in db.scalars(
+            select(Project).where(
+                Project.archived.is_(False), Project.kind == "project"
+            )
+        ):
             total += _scan_dir(
                 db, projectstore.project_dir(proj.slug),
-                container_kind="project", container_id=proj.id, function="engineering",
+                container_kind="project", container_id=proj.id, function="engr",
             )
         print(f"cataloged {total} new files")
         return total

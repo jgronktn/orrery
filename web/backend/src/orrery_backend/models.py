@@ -109,6 +109,11 @@ class Project(Base):
         ForeignKey("users.id"), nullable=True
     )
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Synthesis watermark (§5b): when this container's pending items were last
+    # digested into knowledge. NULL until a future agent synthesis pass runs.
+    last_synthesized_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -161,6 +166,10 @@ class Task(Base):
     facet: Mapped[str | None] = mapped_column(String(50), nullable=True)
     # A free-text note / reference URL the user attaches on the timeline.
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Synthesis state (§5b) — see Catalog.synthesized.
+    synthesized: Mapped[str] = mapped_column(
+        String(20), default="pending", server_default="pending"
+    )
     owner_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id"), nullable=True
     )
@@ -357,6 +366,14 @@ class Catalog(Base):
     text_extracted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # A free-text note / reference URL the user attaches on the timeline.
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Synthesis state (§5b). Manual adds/edits default 'pending'; a future
+    # batched agent pass digests them into `knowledge` facts and flips this to
+    # 'synthesized'. Orthogonal to indexing — a 'pending' file is still
+    # searchable. NOTE: knowledge facts written later carry a Qdrant payload
+    # `source_activity_ids[]` linking back to the activity that produced them.
+    synthesized: Mapped[str] = mapped_column(
+        String(20), default="pending", server_default="pending"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

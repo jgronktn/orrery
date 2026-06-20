@@ -214,6 +214,47 @@ def _unique(directory: Path, filename: str) -> Path:
         i += 1
 
 
+def save_to(
+    rel_root: str,
+    filename: str,
+    data: bytes,
+    *,
+    author_name: str | None = None,
+    author_email: str | None = None,
+) -> tuple[str, str]:
+    """Save a file under <rel_root>/attachments/ (unique on collision) and
+    git-commit. `rel_root` is FILES_ROOT-relative — e.g. "projects/<slug>" or a
+    function folder ("engineering"). Returns (FILES_ROOT-relative path, name)."""
+    directory = filestore.FILES_ROOT / rel_root / "attachments"
+    directory.mkdir(parents=True, exist_ok=True)
+    target = _unique(directory, _safe_name(filename))
+    target.write_bytes(data)
+    rel = str(target.relative_to(filestore.FILES_ROOT))
+    filestore.git_commit(
+        [rel], f"{rel_root}: add attachment {target.name}",
+        author_name=author_name, author_email=author_email,
+    )
+    return rel, target.name
+
+
+def delete_at(
+    rel_path: str,
+    *,
+    author_name: str | None = None,
+    author_email: str | None = None,
+) -> None:
+    """Remove a file by its FILES_ROOT-relative path + git-commit the deletion
+    (history retains it). Works for any container."""
+    target = filestore.FILES_ROOT / rel_path
+    name = target.name
+    if target.exists():
+        target.unlink()
+    filestore.git_commit(
+        [rel_path], f"remove attachment {name}",
+        author_name=author_name, author_email=author_email,
+    )
+
+
 def save_upload(
     slug: str,
     filename: str,

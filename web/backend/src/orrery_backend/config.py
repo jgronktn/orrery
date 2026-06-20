@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     slack_bot_token: str = Field("", validation_alias="SLACK_BOT_TOKEN")
     slack_approval_channel: str = Field("", validation_alias="SLACK_APPROVAL_CHANNEL")
 
+    # Company identity for the Home read model (no company table this phase).
+    company_name: str = "Orrery"
+    company_tagline: str = "Your company, in orbit."
+
     env: str = "dev"
 
 

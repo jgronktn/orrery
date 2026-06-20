@@ -190,9 +190,7 @@ export interface paths {
         };
         /**
          * Project Timeline
-         * @description Timeline nodes for a container (project or function stream): files
-         *     (git-timestamped) + cataloged timeline events + tasks. Optionally filtered
-         *     to one facet (sub-function).
+         * @description Timeline nodes for a container, optionally filtered to one facet.
          */
         get: operations["project_timeline_api_projects__project_id__timeline_get"];
         put?: never;
@@ -275,9 +273,7 @@ export interface paths {
         };
         /**
          * Search Project
-         * @description Container-scoped file search. Keyword (Postgres FTS) always; semantic
-         *     (the `documents` collection) when toggled. No agent. A project scopes by
-         *     container_id; a function stream scopes by its function corpus.
+         * @description Container-scoped file search (no agent).
          */
         get: operations["search_project_api_projects__project_id__search_get"];
         put?: never;
@@ -318,7 +314,7 @@ export interface paths {
         post?: never;
         /**
          * Delete Task
-         * @description Remove an action item (task/milestone/reminder) from the project.
+         * @description Remove an action item (task/milestone/reminder) from the container.
          */
         delete: operations["delete_task_api_projects__project_id__tasks__task_id__delete"];
         options?: never;
@@ -408,6 +404,150 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/functions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Functions */
+        get: operations["list_functions_api_functions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/functions/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Function */
+        get: operations["get_function_api_functions__key__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/functions/{key}/tree": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Function Tree */
+        get: operations["function_tree_api_functions__key__tree_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/functions/{key}/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Function Search */
+        get: operations["function_search_api_functions__key__search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/functions/{key}/timeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Function Timeline */
+        get: operations["function_timeline_api_functions__key__timeline_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/functions/{key}/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload Function Document
+         * @description Drop a file onto the function stream's timeline (lands in the function
+         *     folder). .eml emails dated by their sent/received header.
+         */
+        post: operations["upload_function_document_api_functions__key__documents_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/functions/{key}/documents/{document_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Function Document */
+        delete: operations["delete_function_document_api_functions__key__documents__document_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/home": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Home
+         * @description Company Home — five functions (with counts), a union timeline (recent
+         *     across functions), all pending approvals, and company identity. One trip.
+         */
+        get: operations["home_api_home_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/agents": {
         parameters: {
             query?: never;
@@ -436,48 +576,6 @@ export interface paths {
         put?: never;
         /** Run Agent */
         post: operations["run_agent_api_agents__agent_id__run_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/agents/{agent_id}/tree": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Agent Tree
-         * @description The filesystem the agent can reach: its general reference corpus plus
-         *     every project tree the requesting user shares with it.
-         */
-        get: operations["agent_tree_api_agents__agent_id__tree_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/agents/{agent_id}/search": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Search Agent
-         * @description Search the agent's general reference corpus (function-level files).
-         *     Project files are searched via the project-scoped endpoint.
-         */
-        get: operations["search_agent_api_agents__agent_id__search_get"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -838,10 +936,22 @@ export interface components {
             /** File */
             file: string;
         };
+        /** Body_upload_function_document_api_functions__key__documents_post */
+        Body_upload_function_document_api_functions__key__documents_post: {
+            /** File */
+            file: string;
+        };
         /** Body_upload_task_document_api_projects__project_id__tasks__task_id__documents_post */
         Body_upload_task_document_api_projects__project_id__tasks__task_id__documents_post: {
             /** File */
             file: string;
+        };
+        /** CompanyOut */
+        CompanyOut: {
+            /** Name */
+            name: string;
+            /** Tagline */
+            tagline: string;
         };
         /** ContainerFile */
         ContainerFile: {
@@ -888,7 +998,7 @@ export interface components {
         };
         /**
          * FsTreeNode
-         * @description A node in the agent's filesystem tree. Folders carry `children`
+         * @description A node in a container's filesystem tree. Folders carry `children`
          *     (possibly empty); files have it as null.
          */
         FsTreeNode: {
@@ -899,10 +1009,47 @@ export interface components {
             /** Store Path */
             store_path?: string | null;
         };
+        /** FunctionOut */
+        FunctionOut: {
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Folder */
+            folder: string;
+            /** Agent */
+            agent: string | null;
+            /** Facets */
+            facets: string[];
+            /**
+             * Stream Id
+             * Format: uuid
+             */
+            stream_id: string;
+            /** File Count */
+            file_count: number;
+            /** Reminder Count */
+            reminder_count: number;
+            /** Pending Count */
+            pending_count: number;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * HomeOut
+         * @description Company Home read model — one round trip for the whole-company view.
+         */
+        HomeOut: {
+            company: components["schemas"]["CompanyOut"];
+            /** Functions */
+            functions: components["schemas"]["FunctionOut"][];
+            /** Timeline */
+            timeline: components["schemas"]["TimelineNode"][];
+            /** Approvals */
+            approvals: components["schemas"]["ProposalOut"][];
         };
         /** LinkDocIn */
         LinkDocIn: {
@@ -1990,6 +2137,240 @@ export interface operations {
             };
         };
     };
+    list_functions_api_functions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FunctionOut"][];
+                };
+            };
+        };
+    };
+    get_function_api_functions__key__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FunctionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    function_tree_api_functions__key__tree_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FsTreeNode"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    function_search_api_functions__key__search_get: {
+        parameters: {
+            query: {
+                q: string;
+                semantic?: boolean;
+            };
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchHit"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    function_timeline_api_functions__key__timeline_get: {
+        parameters: {
+            query?: {
+                facet?: string | null;
+            };
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimelineNode"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_function_document_api_functions__key__documents_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_function_document_api_functions__key__documents_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimelineNode"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_function_document_api_functions__key__documents__document_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    home_api_home_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomeOut"];
+                };
+            };
+        };
+    };
     list_agents_api_agents_get: {
         parameters: {
             query?: never;
@@ -2032,71 +2413,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgentResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    agent_tree_api_agents__agent_id__tree_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                agent_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FsTreeNode"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    search_agent_api_agents__agent_id__search_get: {
-        parameters: {
-            query: {
-                q: string;
-                semantic?: boolean;
-            };
-            header?: never;
-            path: {
-                agent_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SearchHit"][];
                 };
             };
             /** @description Validation Error */
