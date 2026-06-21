@@ -500,8 +500,9 @@ export interface paths {
         put?: never;
         /**
          * Upload Function Document
-         * @description Drop a file onto the function stream's timeline (lands in the function
-         *     folder). .eml emails dated by their sent/received header.
+         * @description Drop a file onto the function stream's timeline. Defaults to the
+         *     function's attachments/ folder; pass `dir` (a folder from the function's
+         *     tree) to drop it there instead. .eml emails dated by their header.
          */
         post: operations["upload_function_document_api_functions__key__documents_post"];
         delete?: never;
@@ -522,6 +523,37 @@ export interface paths {
         post?: never;
         /** Delete Function Document */
         delete: operations["delete_function_document_api_functions__key__documents__document_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/functions/{key}/folders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Function Folders
+         * @description Every subfolder under the function, function-relative — the dynamic
+         *     move-target / new-folder vocabulary (replaces the fixed facet list).
+         */
+        get: operations["list_function_folders_api_functions__key__folders_get"];
+        put?: never;
+        /**
+         * Create Function Folder
+         * @description Create a folder under the function (nested via `parent`). Empty folders
+         *     get a tracked .gitkeep so they persist in git + the tree.
+         */
+        post: operations["create_function_folder_api_functions__key__folders_post"];
+        /**
+         * Delete Function Folder
+         * @description Recursively delete a folder + its files (risk-routed; sensitive paths
+         *     queue for approval). The function root itself cannot be deleted.
+         */
+        delete: operations["delete_function_folder_api_functions__key__folders_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -940,6 +972,8 @@ export interface components {
         Body_upload_function_document_api_functions__key__documents_post: {
             /** File */
             file: string;
+            /** Dir */
+            dir?: string | null;
         };
         /** Body_upload_task_document_api_projects__project_id__tasks__task_id__documents_post */
         Body_upload_task_document_api_projects__project_id__tasks__task_id__documents_post: {
@@ -995,6 +1029,16 @@ export interface components {
             path: string;
             /** New Name */
             new_name: string;
+        };
+        /** FolderCreateIn */
+        FolderCreateIn: {
+            /**
+             * Parent
+             * @default
+             */
+            parent: string;
+            /** Name */
+            name: string;
         };
         /**
          * FsTreeNode
@@ -2339,6 +2383,105 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_function_folders_api_functions__key__folders_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_function_folder_api_functions__key__folders_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FolderCreateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_function_folder_api_functions__key__folders_delete: {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileOpResult"];
+                };
             };
             /** @description Validation Error */
             422: {

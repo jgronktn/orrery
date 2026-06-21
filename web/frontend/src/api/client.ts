@@ -23,6 +23,9 @@ export type SearchHit = components["schemas"]["SearchHit"];
 export type FileOpResult = components["schemas"]["FileOpResult"];
 export type TaskDoc = components["schemas"]["TaskDocOut"];
 export type ContainerFile = components["schemas"]["ContainerFile"];
+export type Home = components["schemas"]["HomeOut"];
+export type FunctionInfo = components["schemas"]["FunctionOut"];
+export type Company = components["schemas"]["CompanyOut"];
 
 export class ApiError extends Error {
   status: number;
@@ -74,12 +77,54 @@ export const api = {
     }),
   logout: () => request<void>("/api/auth/logout", { method: "POST" }),
   listAgents: () => request<AgentSummary[]>("/api/agents"),
-  agentTree: (agentId: string) =>
-    request<FsTreeNode>(`/api/agents/${agentId}/tree`),
   runAgent: (agentId: string, body: AgentRequest) =>
     request<AgentResponse>(`/api/agents/${agentId}/run`, {
       method: "POST",
       body: JSON.stringify(body),
+    }),
+
+  // Company Home + function streams (the warm-paper surfaces)
+  home: () => request<Home>("/api/home"),
+  listFunctions: () => request<FunctionInfo[]>("/api/functions"),
+  getFunction: (key: string) =>
+    request<FunctionInfo>(`/api/functions/${key}`),
+  functionTimeline: (key: string, facet?: string | null) =>
+    request<TimelineNode[]>(
+      `/api/functions/${key}/timeline` +
+        (facet ? `?facet=${encodeURIComponent(facet)}` : ""),
+    ),
+  functionTree: (key: string) =>
+    request<FsTreeNode>(`/api/functions/${key}/tree`),
+  searchFunction: (key: string, q: string, semantic: boolean) =>
+    request<SearchHit[]>(
+      `/api/functions/${key}/search?q=${encodeURIComponent(q)}` +
+        (semantic ? "&semantic=true" : ""),
+    ),
+  // Free-form folders within a function (paths are function-relative)
+  functionFolders: (key: string) =>
+    request<string[]>(`/api/functions/${key}/folders`),
+  createFolder: (key: string, parent: string, name: string) =>
+    request<string[]>(`/api/functions/${key}/folders`, {
+      method: "POST",
+      body: JSON.stringify({ parent, name }),
+    }),
+  deleteFolder: (key: string, path: string) =>
+    request<FileOpResult>(
+      `/api/functions/${key}/folders?path=${encodeURIComponent(path)}`,
+      { method: "DELETE" },
+    ),
+  uploadFunctionDoc: (key: string, file: File, dir?: string) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    if (dir) fd.append("dir", dir);
+    return request<TimelineNode>(`/api/functions/${key}/documents`, {
+      method: "POST",
+      body: fd,
+    });
+  },
+  deleteFunctionDoc: (key: string, documentId: string) =>
+    request<void>(`/api/functions/${key}/documents/${documentId}`, {
+      method: "DELETE",
     }),
 
   // Projects + tasks

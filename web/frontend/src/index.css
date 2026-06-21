@@ -1,1 +1,87 @@
 @import "tailwindcss";
+
+/* ── Orrery design system (warm paper) ──────────────────────────────
+   Tokens from the Claude Design handoff (README.md §Design Tokens).
+   Registered as Tailwind v4 theme vars so utilities like `bg-paper`,
+   `text-ink`, `font-mono`, `border-line` exist. Function accents are NOT
+   theme colors — they vary per surface and are applied via inline style
+   from theme.ts. */
+@theme {
+  --font-sans: "Schibsted Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  /* Neutrals — sage linen (cool, green-gray off-whites; ink is charcoal) */
+  --color-page: #e3e6db; /* outermost background */
+  --color-paper: #eef0e6; /* surface card */
+  --color-paper-alt: #f5f7ee; /* topbar, rails, main column */
+  --color-ink: #353a32; /* charcoal — core, timeline, primary buttons */
+  --color-ink-soft: #454a40; /* button hover */
+  --color-strong: #41463b; /* strong body */
+  --color-strong-alt: #4c5045;
+  --color-muted: #646859; /* secondary text */
+  --color-muted-alt: #6f7363;
+  --color-faint: #7e8270; /* tertiary text, section labels */
+  --color-faint-alt: #8d917f;
+  --color-hint: #9ba08b; /* mono captions, placeholders */
+  --color-hint-alt: #b0b49f;
+
+  --color-line: #e0e3d4; /* borders, dividers, tracks */
+  --color-line-soft: #d9dcca;
+  --color-line-strong: #d2d6c2;
+  --color-line-ring: #d6dac8;
+  --color-hairline: #e9ebde; /* inner dividers */
+  --color-rowhover: #f1f3ea; /* list/row hover bg */
+
+  /* Risk ramp (monochrome, sage-linen family) */
+  --color-risk-low-bg: #eceee3;
+  --color-risk-low-fg: #8d917f;
+  --color-risk-med-bg: #d9dcca;
+  --color-risk-med-fg: #4c5045;
+  --color-risk-high-bg: #353a32;
+  --color-risk-high-fg: #f4f6ee;
+
+  /* Motion — ambient orrery rotation + status pulse */
+  --animate-orrery-spin: orrery-spin 58s linear infinite;
+  --animate-orrery-spin-slow: orrery-spin 120s linear infinite;
+  --animate-orrery-spin-rev: orrery-spin-rev 82s linear infinite;
+  --animate-orrery-pulse: orrery-pulse 2.6s ease-in-out infinite;
+}
+
+@keyframes orrery-spin {
+  from {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+@keyframes orrery-spin-rev {
+  from {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  to {
+    transform: translate(-50%, -50%) rotate(-360deg);
+  }
+}
+@keyframes orrery-pulse {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  margin: 0;
+  background: var(--color-page);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}

@@ -1,4 +1,8 @@
-import Layout from "./app/Layout";
+import { Navigate, Route, Routes } from "react-router-dom";
+
+import CompanyHome from "./app/orrery/CompanyHome";
+import FunctionStream from "./app/orrery/FunctionStream";
+import ProjectView from "./app/orrery/ProjectView";
 import { useAuth } from "./auth/AuthContext";
 import LoginPage from "./auth/LoginPage";
 
@@ -7,11 +11,20 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen grid place-items-center bg-slate-100 text-slate-400">
+      <div className="grid min-h-full place-items-center bg-page text-hint">
         Loading…
       </div>
     );
   }
 
-  return user ? <Layout /> : <LoginPage />;
+  if (!user) return <LoginPage />;
+
+  return (
+    <Routes>
+      <Route path="/" element={<CompanyHome />} />
+      <Route path="/fn/:key" element={<FunctionStream />} />
+      <Route path="/project/:id" element={<ProjectView />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
 }

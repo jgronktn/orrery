@@ -1,0 +1,672 @@
+import { useCallback, useEffect, useState } from "react";
+
+import { api, type FsTreeNode } from "../../api/client";
+import type { PreviewFile } from "./FileViewer";
+import { accentOf } from "./theme";
+
+// Far-left filesystem panel on Company Home: a vertical tree of the selected
+// function's folder (GET /api/functions/{key}/tree). Single-clicking a file
+// opens it in the center viewer; hovering a file row reveals rename / move /
+// delete actions. Dropping a desktop file onto a folder uploads it there.
+
+interface FileOps {
+  folders: string[];
+  onRename: (path: string, newName: string) => void;
+  onMove: (path: string, targetDir: string) => void;
+  onDelete: (path: string) => void;
+  onAddFolder: (parent: string, name: string) => void;
+  onDeleteFolder: (path: string) => void;
+}
+
+// A folder's function-relative path (its tree store_path minus the leading
+// function-folder segment) — what the folder endpoints + move expect.
+function funcRel(storePath: string | null | undefined): string {
+  return storePath ? storePath.split("/").slice(1).join("/") : "";
+}
+
+export function FunctionFiles({
+  selectedKey,
+  name,
+  folders,
+  reloadToken,
+  onOpenFile,
+  activePath,
+  onUploaded,
+  onRename,
+  onMove,
+  onDelete,
+  onAddFolder,
+  onDeleteFolder,
+}: {
+  selectedKey: string | null;
+  name: string | null;
+  folders: string[];
+  reloadToken: number;
+  onOpenFile: (file: PreviewFile) => void;
+  activePath: string | null;
+  onUploaded?: () => void;
+  onRename: (path: string, newName: string) => void;
+  onMove: (path: string, targetDir: string) => void;
+  onDelete: (path: string) => void;
+  onAddFolder: (parent: string, name: string) => void;
+  onDeleteFolder: (path: string) => void;
+}) {
+  const [tree, setTree] = useState<FsTreeNode | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [rootOver, setRootOver] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [newRoot, setNewRoot] = useState(false);
+  const [rootDraft, setRootDraft] = useState("");
+
+  const reload = useCallback(async () => {
+    if (!selectedKey) return;
+    try {
+      setTree(await api.functionTree(selectedKey));
+    } catch {
+      /* keep the current tree on a transient error */
+    }
+  }, [selectedKey]);
+
+  // Re-fetch on function change AND whenever the parent bumps reloadToken
+  // (after a successful move/delete/rename).
+  useEffect(() => {
+    if (!selectedKey) {
+      setTree(null);
+      return;
+    }
+    let live = true;
+    setLoading(true);
+    api
+      .functionTree(selectedKey)
+      .then((t) => live && setTree(t))
+      .catch(() => live && setTree(null))
+      .finally(() => live && setLoading(false));
+    return () => {
+      live = false;
+    };
+  }, [selectedKey, reloadToken]);
+
+  const upload = useCallback(
+    async (dir: string | undefined, file: File) => {
+      if (!selectedKey) return;
+      setBusy(true);
+      try {
+        await api.uploadFunctionDoc(selectedKey, file, dir);
+        await reload();
+        onUploaded?.();
+      } catch {
+        /* surfaced elsewhere; keep the panel responsive */
+      } finally {
+        setBusy(false);
+      }
+    },
+    [selectedKey, reload, onUploaded],
+  );
+
+  const accent = selectedKey ? accentOf(selectedKey) : "#353a32";
+  const children = tree?.children ?? [];
+  const ops: FileOps = {
+    folders,
+    onRename,
+    onMove,
+    onDelete,
+    onAddFolder,
+    onDeleteFolder,
+  };
+
+  return (
+    <div className="flex w-[520px] shrink-0 flex-col border-r border-line bg-paper-alt">
+      <div className="flex items-center gap-2 border-b border-line px-4 py-3.5">
+        <span
+          className="h-2 w-2 rounded-full"
+          style={{ background: selectedKey ? accent : "#c4c8b6" }}
+        />
+        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-faint">
+          {selectedKey ? `${name} files` : "Files"}
+        </span>
+        {busy && (
+          <span className="font-mono text-[9px] text-hint">adding…</span>
+        )}
+        {selectedKey && (
+          <button
+            onClick={() => {
+              setRootDraft("");
+              setNewRoot(true);
+            }}
+            className="ml-auto rounded border border-line-soft bg-white px-2 py-0.5 font-mono text-[10px] text-strong-alt hover:bg-rowhover"
+          >
+            ＋ New folder
+          </button>
+        )}
+      </div>
+
+      <div
+        className="min-h-0 flex-1 overflow-y-auto py-2"
+        style={rootOver ? { background: `${accent}0d` } : undefined}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setRootOver(true);
+        }}
+        onDragLeave={() => setRootOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setRootOver(false);
+          const f = e.dataTransfer.files?.[0];
+          if (f) void upload(undefined, f);
+        }}
+      >
+        {newRoot && selectedKey && (
+          <NewFolderInput
+            value={rootDraft}
+            depth={0}
+            onChange={setRootDraft}
+            onCommit={() => {
+              const v = rootDraft.trim();
+              if (v) onAddFolder("", v);
+              setNewRoot(false);
+            }}
+            onCancel={() => setNewRoot(false)}
+          />
+        )}
+        {!selectedKey ? (
+          <p className="px-4 py-6 text-[12px] leading-relaxed text-hint">
+            Select a function to browse its files.
+          </p>
+        ) : loading ? (
+          <p className="px-4 py-6 text-[12px] text-hint">Loading…</p>
+        ) : children.length === 0 ? (
+          <p className="px-4 py-6 text-[12px] leading-relaxed text-hint">
+            No files yet — drop one here to add it.
+          </p>
+        ) : (
+          children.map((node, i) => (
+            <TreeNode
+              key={i}
+              node={node}
+              depth={0}
+              accent={accent}
+              onOpenFile={onOpenFile}
+              onUpload={upload}
+              activePath={activePath}
+              ops={ops}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TreeNode({
+  node,
+  depth,
+  accent,
+  onOpenFile,
+  onUpload,
+  activePath,
+  ops,
+}: {
+  node: FsTreeNode;
+  depth: number;
+  accent: string;
+  onOpenFile: (file: PreviewFile) => void;
+  onUpload: (dir: string | undefined, file: File) => void;
+  activePath: string | null;
+  ops: FileOps;
+}) {
+  const isFolder = node.children != null;
+  const [open, setOpen] = useState(depth < 1);
+  const [over, setOver] = useState(false);
+  const [addingSub, setAddingSub] = useState(false);
+  const [subDraft, setSubDraft] = useState("");
+  const [confirming, setConfirming] = useState(false);
+  const pad = depth * 14 + 12;
+
+  if (isFolder) {
+    const kids = node.children ?? [];
+    const rel = funcRel(node.store_path);
+    return (
+      <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setOver(true);
+        }}
+        onDragLeave={(e) => {
+          e.stopPropagation();
+          setOver(false);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setOver(false);
+          const f = e.dataTransfer.files?.[0];
+          if (f && node.store_path) onUpload(node.store_path, f);
+        }}
+      >
+        <div
+          className="group relative flex items-center pr-2 hover:bg-rowhover"
+          style={{
+            background: over ? `${accent}1f` : undefined,
+            boxShadow: over ? `inset 0 0 0 1px ${accent}66` : undefined,
+          }}
+        >
+          <button
+            onClick={() => setOpen((o) => !o)}
+            className="flex min-w-0 flex-1 items-center gap-1.5 py-1 text-left"
+            style={{ paddingLeft: pad }}
+          >
+            <Chevron open={open} />
+            <FolderGlyph />
+            <span className="truncate text-[12.5px] text-strong">{node.name}</span>
+          </button>
+          {confirming ? (
+            <span className="flex shrink-0 items-center gap-1 text-[11px]">
+              <span className="text-muted">Delete folder + contents?</span>
+              <button
+                onClick={() => setConfirming(false)}
+                className="rounded border border-line-soft bg-white px-1.5 py-0.5 text-strong-alt hover:bg-rowhover"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  ops.onDeleteFolder(rel);
+                  setConfirming(false);
+                }}
+                className="rounded bg-ink px-1.5 py-0.5 text-[#f4f6ee] hover:bg-ink-soft"
+              >
+                Delete
+              </button>
+            </span>
+          ) : (
+            <span className="flex shrink-0 items-center gap-0.5 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
+              <IconBtn
+                title="New subfolder"
+                onClick={() => {
+                  setSubDraft("");
+                  setAddingSub(true);
+                  setOpen(true);
+                }}
+              >
+                <PlusGlyph />
+              </IconBtn>
+              <IconBtn title="Delete folder" onClick={() => setConfirming(true)}>
+                <XGlyph />
+              </IconBtn>
+            </span>
+          )}
+        </div>
+        {addingSub && (
+          <NewFolderInput
+            value={subDraft}
+            depth={depth + 1}
+            onChange={setSubDraft}
+            onCommit={() => {
+              const v = subDraft.trim();
+              if (v) ops.onAddFolder(rel, v);
+              setAddingSub(false);
+            }}
+            onCancel={() => setAddingSub(false)}
+          />
+        )}
+        {open &&
+          kids.map((c, i) => (
+            <TreeNode
+              key={i}
+              node={c}
+              depth={depth + 1}
+              accent={accent}
+              onOpenFile={onOpenFile}
+              onUpload={onUpload}
+              activePath={activePath}
+              ops={ops}
+            />
+          ))}
+      </div>
+    );
+  }
+
+  return (
+    <FileRow
+      node={node}
+      pad={pad + 16}
+      accent={accent}
+      active={!!node.store_path && node.store_path === activePath}
+      onOpenFile={onOpenFile}
+      ops={ops}
+    />
+  );
+}
+
+function FileRow({
+  node,
+  pad,
+  accent,
+  active,
+  onOpenFile,
+  ops,
+}: {
+  node: FsTreeNode;
+  pad: number;
+  accent: string;
+  active: boolean;
+  onOpenFile: (file: PreviewFile) => void;
+  ops: FileOps;
+}) {
+  const path = node.store_path ?? "";
+  const [mode, setMode] = useState<"idle" | "rename" | "move" | "delete">("idle");
+  const [draft, setDraft] = useState(node.name);
+
+  if (mode === "rename") {
+    const commit = () => {
+      const v = draft.trim();
+      if (v && v !== node.name) ops.onRename(path, v);
+      setMode("idle");
+    };
+    return (
+      <div className="flex items-center gap-1.5 py-1 pr-2" style={{ paddingLeft: pad }}>
+        <FileGlyph accent={accent} />
+        <input
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commit();
+            else if (e.key === "Escape") setMode("idle");
+          }}
+          onBlur={() => setMode("idle")}
+          className="min-w-0 flex-1 rounded border border-line-soft bg-white px-1 py-0.5 text-[12.5px] text-ink outline-none"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="group relative flex items-center pr-2 hover:bg-rowhover"
+      style={{ paddingLeft: pad, background: active ? `${accent}1a` : undefined }}
+    >
+      <button
+        onClick={() =>
+          path && onOpenFile({ path, name: node.name, ext: extOf(node.name) })
+        }
+        disabled={!path}
+        className="flex min-w-0 flex-1 items-center gap-1.5 py-1 text-left"
+        title={node.name}
+      >
+        <FileGlyph accent={accent} />
+        <span
+          className="truncate text-[12.5px]"
+          style={{ color: active ? accent : "#646859", fontWeight: active ? 600 : 400 }}
+        >
+          {node.name}
+        </span>
+      </button>
+
+      {mode === "delete" ? (
+        <span className="flex shrink-0 items-center gap-1 text-[11px]">
+          <span className="text-muted">Delete?</span>
+          <button
+            onClick={() => setMode("idle")}
+            className="rounded border border-line-soft bg-white px-1.5 py-0.5 text-strong-alt hover:bg-rowhover"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => {
+              ops.onDelete(path);
+              setMode("idle");
+            }}
+            className="rounded bg-ink px-1.5 py-0.5 text-[#f4f6ee] hover:bg-ink-soft"
+          >
+            Delete
+          </button>
+        </span>
+      ) : (
+        path && (
+          <span className="flex shrink-0 items-center gap-0.5 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
+            <IconBtn
+              title="Rename"
+              onClick={() => {
+                setDraft(node.name);
+                setMode("rename");
+              }}
+            >
+              <PencilGlyph />
+            </IconBtn>
+            <IconBtn
+              title="Move"
+              onClick={() => setMode((m) => (m === "move" ? "idle" : "move"))}
+            >
+              <MoveGlyph />
+            </IconBtn>
+            <IconBtn title="Delete" onClick={() => setMode("delete")}>
+              <XGlyph />
+            </IconBtn>
+          </span>
+        )
+      )}
+
+      {mode === "move" && (
+        <MovePopover
+          folders={ops.folders}
+          onPick={(dir) => {
+            ops.onMove(path, dir);
+            setMode("idle");
+          }}
+          onClose={() => setMode("idle")}
+        />
+      )}
+    </div>
+  );
+}
+
+function MovePopover({
+  folders,
+  onPick,
+  onClose,
+}: {
+  folders: string[];
+  onPick: (dir: string) => void;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <>
+      <button
+        className="fixed inset-0 z-40 cursor-default"
+        onClick={onClose}
+        tabIndex={-1}
+        aria-hidden
+      />
+      <div className="absolute right-2 top-7 z-50 max-h-72 w-52 overflow-y-auto rounded-lg border border-line-soft bg-white py-1 shadow-[0_8px_24px_-8px_rgba(20,18,12,.3)]">
+        <div className="px-3 py-1 font-mono text-[9px] uppercase tracking-[0.12em] text-hint">
+          Move to
+        </div>
+        <button
+          onClick={() => onPick("")}
+          className="block w-full px-3 py-1 text-left text-[12.5px] text-strong hover:bg-rowhover"
+        >
+          Root
+        </button>
+        {folders.map((f) => (
+          <button
+            key={f}
+            onClick={() => onPick(f)}
+            className="block w-full truncate px-3 py-1 text-left text-[12.5px] text-strong hover:bg-rowhover"
+            title={f}
+          >
+            {f}
+          </button>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function NewFolderInput({
+  value,
+  depth,
+  onChange,
+  onCommit,
+  onCancel,
+}: {
+  value: string;
+  depth: number;
+  onChange: (v: string) => void;
+  onCommit: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div
+      className="flex items-center gap-1.5 py-1 pr-2"
+      style={{ paddingLeft: depth * 14 + 12 }}
+    >
+      <FolderGlyph />
+      <input
+        autoFocus
+        value={value}
+        placeholder="New folder name"
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") onCommit();
+          else if (e.key === "Escape") onCancel();
+        }}
+        onBlur={onCancel}
+        className="min-w-0 flex-1 rounded border border-line-soft bg-white px-1 py-0.5 text-[12.5px] text-ink outline-none"
+      />
+    </div>
+  );
+}
+
+function IconBtn({
+  title,
+  onClick,
+  children,
+}: {
+  title: string;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      title={title}
+      onClick={onClick}
+      className="grid h-5 w-5 place-items-center rounded text-hint hover:bg-line hover:text-strong"
+    >
+      {children}
+    </button>
+  );
+}
+
+function extOf(name: string): string {
+  const i = name.lastIndexOf(".");
+  return i > 0 ? name.slice(i + 1).toLowerCase() : "";
+}
+
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg
+      width="10"
+      height="10"
+      viewBox="0 0 10 10"
+      className="shrink-0 text-hint"
+      style={{ transform: open ? "rotate(90deg)" : "none" }}
+      aria-hidden
+    >
+      <path d="M3 2l4 3-4 3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function FolderGlyph() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" className="shrink-0 text-faint" aria-hidden>
+      <path
+        d="M1.5 4.5A1.5 1.5 0 013 3h3l1.5 1.5H13A1.5 1.5 0 0114.5 6v6A1.5 1.5 0 0113 13.5H3A1.5 1.5 0 011.5 12z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function FileGlyph({ accent }: { accent: string }) {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" className="shrink-0" aria-hidden>
+      <path
+        d="M4 1.5h5l3 3V14a.5.5 0 01-.5.5h-7A.5.5 0 014 14V2a.5.5 0 010-.5z"
+        fill="none"
+        stroke={accent}
+        strokeWidth="1.2"
+        strokeLinejoin="round"
+        opacity="0.85"
+      />
+    </svg>
+  );
+}
+
+function PencilGlyph() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden>
+      <path
+        d="M11 2.5l2.5 2.5L6 12.5 3 13l.5-3z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function MoveGlyph() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden>
+      <path
+        d="M2 8h10M8.5 4.5L13 8l-4.5 3.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function XGlyph() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden>
+      <path
+        d="M4 4l8 8M12 4l-8 8"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function PlusGlyph() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden>
+      <path
+        d="M8 3v10M3 8h10"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
