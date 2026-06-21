@@ -15,10 +15,12 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+import shutil
 import uuid as uuidlib
 from datetime import datetime, timezone
 
 from fastapi import BackgroundTasks
+from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
 
 from orrery_lib import docstore, filestore
@@ -36,7 +38,7 @@ _log = logging.getLogger("orrery.commit_path")
 _SENSITIVE_PREFIXES = ("corporate/equity/", "corporate/financial/debt/")
 _ORDER = {"low": 0, "medium": 1, "high": 2}
 
-FILE_OPS = {"file_rename", "file_move", "file_delete"}
+FILE_OPS = {"file_rename", "file_move", "file_delete", "folder_delete"}
 
 
 def path_risk_floor(path: str | None) -> str:
@@ -77,6 +79,7 @@ def add_file(
     description: str | None = None,
     occurred_at: datetime | None = None,
     on_timeline: bool = False,
+    dest_dir: str | None = None,
     background_tasks: BackgroundTasks | None = None,
 ) -> Catalog:
     """Catalog a file into a container (project OR function stream), Tier 0,
@@ -93,7 +96,7 @@ def add_file(
         ckind, cid, fn = "project", project.id, function
 
     rel_path, _name = projectstore.save_to(
-        rel_root, filename, data,
+        rel_root, filename, data, subdir=dest_dir,
         author_name=uploader.display_name, author_email=uploader.email,
     )
     text = filestore.extract_text(filestore.FILES_ROOT / rel_path)
@@ -141,12 +144,17 @@ def execute_file_op(db: DbSession, kind: str, payload: dict) -> None:
     """Perform a rename/move/delete from a proposal payload — git mv/rm +
     commit, then keep the catalog row + `documents` embeddings in sync. Used
     by both the immediate (low-risk) path and on approval. Caller commits."""
-    src: str = payload["src"]
-    dest: str | None = payload.get("dest")
     author = {
         "author_name": payload.get("author_name"),
         "author_email": payload.get("author_email"),
     }
+
+    if kind == "folder_delete":
+        _execute_folder_delete(db, payload["rel_path"], author)
+        return
+
+    src: str = payload["src"]
+    dest: str | None = payload.get("dest")
     cat = db.get(Catalog, uuidlib.UUID(payload["catalog_id"])) if payload.get("catalog_id") else None
     full_src = filestore.FILES_ROOT / src
 
@@ -213,6 +221,61 @@ def route_file_op(
         user_id=user.id, project_id=cat.container_id,
         agent_id=functions.agent_for_function(cat.function) or "engineering",
         kind=kind, summary=summary, risk=floor, payload=payload, status="pending",
+    )
+    db.add(rec)
+    db.commit()
+    db.refresh(rec)
+    notify_approval(summary, floor)
+    return "queued", rec
+
+
+# ── Recursive folder delete ─────────────────────────────────────────
+
+
+def _execute_folder_delete(db: DbSession, rel_path: str, author: dict) -> None:
+    """Remove a folder and everything under it: drop each contained file's
+    embeddings + catalog row, rmtree the directory, and git-commit the
+    deletions. Caller commits the session."""
+    prefix = rel_path.rstrip("/")
+    rows = db.scalars(
+        select(Catalog).where(Catalog.path.like(f"{prefix}/%"))
+    ).all()
+    for cat in rows:
+        docstore.delete_file(str(cat.id))
+        db.delete(cat)
+    full = filestore.FILES_ROOT / prefix
+    if full.exists():
+        shutil.rmtree(full)
+    filestore.git_commit([prefix], f"files: delete folder {prefix}", **author)
+
+
+def route_folder_delete(
+    db: DbSession,
+    *,
+    rel_path: str,
+    function: str,
+    user: User,
+    summary: str,
+) -> tuple[str, ProposalRecord | None]:
+    """Risk-route a recursive folder delete by destination path: low executes
+    now; sensitive (records-of-record) queues for approval. Same pipeline as
+    file ops — approval dispatches kind 'folder_delete' to execute_file_op."""
+    payload: dict = {
+        "rel_path": rel_path,
+        "author_name": user.display_name,
+        "author_email": user.email,
+    }
+    floor = path_risk_floor(rel_path.rstrip("/") + "/")
+    if floor == "low":
+        execute_file_op(db, "folder_delete", payload)
+        db.commit()
+        return "done", None
+
+    rec = ProposalRecord(
+        user_id=user.id, project_id=None,
+        agent_id=functions.agent_for_function(function) or "engineering",
+        kind="folder_delete", summary=summary, risk=floor,
+        payload=payload, status="pending",
     )
     db.add(rec)
     db.commit()

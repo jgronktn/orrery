@@ -65,7 +65,7 @@ def build_tree(path: Path, name: str) -> dict:
     """Walk a directory into a nested {name, children?} tree — folders carry a
     children list, files don't (the explorer engine keys folder-ness on that).
     Skips VCS/placeholder noise."""
-    node: dict = {"name": name}
+    node: dict = {"name": name, "store_path": str(path.relative_to(filestore.FILES_ROOT))}
     if path.is_dir():
         children: list[dict] = []
         for child in sorted(path.iterdir(), key=lambda p: p.name.lower()):
@@ -73,8 +73,6 @@ def build_tree(path: Path, name: str) -> dict:
                 continue
             children.append(build_tree(child, child.name))
         node["children"] = children
-    else:
-        node["store_path"] = str(path.relative_to(filestore.FILES_ROOT))
     return node
 
 
@@ -219,13 +217,20 @@ def save_to(
     filename: str,
     data: bytes,
     *,
+    subdir: str | None = None,
     author_name: str | None = None,
     author_email: str | None = None,
 ) -> tuple[str, str]:
-    """Save a file under <rel_root>/attachments/ (unique on collision) and
-    git-commit. `rel_root` is FILES_ROOT-relative — e.g. "projects/<slug>" or a
-    function folder ("engineering"). Returns (FILES_ROOT-relative path, name)."""
-    directory = filestore.FILES_ROOT / rel_root / "attachments"
+    """Save a file (unique on collision) and git-commit. By default lands in
+    <rel_root>/attachments/; pass `subdir` (a FILES_ROOT-relative folder, e.g. a
+    tree folder the user dropped onto) to place it there instead. `rel_root` is
+    FILES_ROOT-relative — e.g. "projects/<slug>" or a function folder
+    ("engineering"). Returns (FILES_ROOT-relative path, name)."""
+    directory = (
+        filestore.FILES_ROOT / subdir
+        if subdir
+        else filestore.FILES_ROOT / rel_root / "attachments"
+    )
     directory.mkdir(parents=True, exist_ok=True)
     target = _unique(directory, _safe_name(filename))
     target.write_bytes(data)

@@ -371,10 +371,12 @@ async def _read_upload(file: UploadFile) -> bytes:
 def ingest_timeline_drop(
     db: DbSession, container: Project, data: bytes, filename: str | None,
     uploader: User, background_tasks: BackgroundTasks,
+    dest_dir: str | None = None,
 ) -> Catalog:
     """Catalog a dropped file as a timeline event (.eml dated by header). Works
     for projects AND function streams — add_file resolves the destination by
-    container kind."""
+    container kind. `dest_dir` (FILES_ROOT-relative folder) overrides the
+    default attachments/ landing spot — e.g. a tree folder the user dropped on."""
     filename = filename or "upload"
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     description: str | None = None
@@ -394,7 +396,7 @@ def ingest_timeline_drop(
         filename=filename, file_type=node_type, ext=ext or None,
         source="timeline_drop", uploader=uploader, title=title,
         description=description, occurred_at=occurred, on_timeline=True,
-        background_tasks=background_tasks,
+        dest_dir=dest_dir, background_tasks=background_tasks,
     )
 
 

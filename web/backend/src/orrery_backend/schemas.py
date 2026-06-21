@@ -150,6 +150,11 @@ class FileOpResult(BaseModel):
     proposal_id: uuid.UUID | None = None
 
 
+class FolderCreateIn(BaseModel):
+    parent: str = ""  # folder path within the function ("" = function root)
+    name: str = Field(min_length=1, max_length=120)
+
+
 class TaskDocOut(BaseModel):
     id: uuid.UUID
     path: str  # FILES_ROOT-relative

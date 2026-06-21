@@ -27,12 +27,16 @@ router = APIRouter(prefix="/api/files", tags=["files"])
 
 
 def _container_root(cat: Catalog, db: DbSession) -> tuple[str, set[str]]:
-    """The container's FILES_ROOT-relative folder + its allowed facet subdirs."""
+    """The container's FILES_ROOT-relative folder + its allowed facet subdirs.
+    For a function file the root is the function's FOLDER, not its key — they
+    differ (key `engr` → folder `engineering`)."""
     if cat.container_kind == "project" and cat.container_id is not None:
         project = db.get(Project, cat.container_id)
         assert project is not None
         return f"projects/{project.slug}", set(projectstore.PROJECT_FACETS)
-    return cat.function, set(functions.facets_for(cat.function))
+    return functions.FUNCTIONS[cat.function].folder, set(
+        functions.facets_for(cat.function)
+    )
 
 
 def _accessible_file(path: str, user: User, db: DbSession) -> Catalog:
@@ -111,17 +115,24 @@ def file_move(
     db: DbSession = Depends(get_db),
 ) -> dict:
     cat = _accessible_file(body.path, user, db)
-    root, allowed = _container_root(cat, db)
-    if body.target_dir and body.target_dir not in allowed:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "invalid destination folder")
+    root, _allowed = _container_root(cat, db)
+    # Folders are free-form now: the target may be any existing folder within
+    # the container root (nested ok), not just a fixed facet. Validate it
+    # resolves inside the root with no traversal.
+    target = body.target_dir.strip().strip("/").replace("\\", "/")
+    if target:
+        if ".." in target.split("/") or target.startswith("."):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "invalid destination folder")
+        if not (filestore.FILES_ROOT / root / target).is_dir():
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "destination folder does not exist")
     name = cat.path.rsplit("/", 1)[-1]
-    dest = f"{root}/{body.target_dir}/{name}" if body.target_dir else f"{root}/{name}"
+    dest = f"{root}/{target}/{name}" if target else f"{root}/{name}"
     if dest == cat.path:
         return {"status": "done", "proposal_id": None}
     status_, rec = commit_path.route_file_op(
         db, kind="file_move", cat=cat, user=user, dest=dest,
-        new_facet=body.target_dir or None,
-        summary=f"Move {cat.title} → {body.target_dir or '/'}",
+        new_facet=target.split("/")[0] if target else None,
+        summary=f"Move {cat.title} → {target or '/'}",
     )
     return {"status": status_, "proposal_id": rec.id if rec else None}
 

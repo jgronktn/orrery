@@ -12,6 +12,7 @@ from fastapi import (
     BackgroundTasks,
     Depends,
     File,
+    Form,
     HTTPException,
     UploadFile,
     status,
@@ -27,6 +28,8 @@ from .config import settings
 from .db import get_db
 from .models import Catalog, Project, ProposalRecord, Task, User
 from .schemas import (
+    FileOpResult,
+    FolderCreateIn,
     FsTreeNode,
     FunctionOut,
     HomeOut,
@@ -139,15 +142,35 @@ async def upload_function_document(
     key: str,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
+    dir: str | None = Form(None),
     user: User = Depends(current_user),
     db: DbSession = Depends(get_db),
 ) -> dict:
-    """Drop a file onto the function stream's timeline (lands in the function
-    folder). .eml emails dated by their sent/received header."""
+    """Drop a file onto the function stream's timeline. Defaults to the
+    function's attachments/ folder; pass `dir` (a folder from the function's
+    tree) to drop it there instead. .eml emails dated by their header."""
     stream = _resolve_stream(key, user, db)
+    dest_dir = _validate_dir(key, dir)
     data = await projects._read_upload(file)
-    cat = projects.ingest_timeline_drop(db, stream, data, file.filename, user, background_tasks)
+    cat = projects.ingest_timeline_drop(
+        db, stream, data, file.filename, user, background_tasks, dest_dir=dest_dir
+    )
     return projects._doc_node(cat)
+
+
+def _validate_dir(key: str, dir: str | None) -> str | None:
+    """A drop target must resolve inside the function's own folder (no traversal,
+    no escaping into another function or the projects tree)."""
+    if not dir:
+        return None
+    folder = functions.FUNCTIONS[key].folder
+    norm = dir.strip().strip("/").replace("\\", "/")
+    parts = norm.split("/")
+    if ".." in parts or not norm:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "invalid target folder")
+    if norm != folder and not norm.startswith(folder + "/"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "target outside function folder")
+    return norm
 
 
 @router.delete("/{key}/documents/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -163,6 +186,88 @@ def delete_function_document(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "document not found")
     commit_path.remove_file(db, cat, actor=user)
     return None
+
+
+# ── Folders (free-form, nested) ─────────────────────────────────────
+
+
+def _func_subpath(key: str, sub: str | None) -> tuple[str, str]:
+    """Validate a function-relative subpath (no traversal). Returns
+    (function-relative, FILES_ROOT-relative) — e.g. ("specs/2026",
+    "engineering/specs/2026). "" → the function root."""
+    folder = functions.FUNCTIONS[key].folder
+    norm = (sub or "").strip().strip("/").replace("\\", "/")
+    if norm and (".." in norm.split("/") or norm.startswith(".")):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "invalid folder path")
+    return norm, (f"{folder}/{norm}" if norm else folder)
+
+
+@router.get("/{key}/folders", response_model=list[str])
+def list_function_folders(
+    key: str, user: User = Depends(current_user), db: DbSession = Depends(get_db)
+) -> list[str]:
+    """Every subfolder under the function, function-relative — the dynamic
+    move-target / new-folder vocabulary (replaces the fixed facet list)."""
+    _resolve_stream(key, user, db)
+    base = filestore.FILES_ROOT / functions.FUNCTIONS[key].folder
+    if not base.is_dir():
+        return []
+    out = [
+        str(p.relative_to(base))
+        for p in base.rglob("*")
+        if p.is_dir() and ".git" not in p.parts
+    ]
+    return sorted(out)
+
+
+@router.post("/{key}/folders", response_model=list[str], status_code=status.HTTP_201_CREATED)
+def create_function_folder(
+    key: str,
+    body: FolderCreateIn,
+    user: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> list[str]:
+    """Create a folder under the function (nested via `parent`). Empty folders
+    get a tracked .gitkeep so they persist in git + the tree."""
+    _resolve_stream(key, user, db)
+    _, parent_full = _func_subpath(key, body.parent)
+    if not (filestore.FILES_ROOT / parent_full).is_dir():
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "parent folder not found")
+    name = projectstore._safe_name(body.name)
+    if not name or name in {".git", "attachments"}:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "invalid folder name")
+    new_dir = filestore.FILES_ROOT / parent_full / name
+    new_dir.mkdir(parents=True, exist_ok=True)
+    keep = new_dir / ".gitkeep"
+    if not keep.exists():
+        keep.write_text("", encoding="utf-8")
+    filestore.git_commit(
+        [str(keep.relative_to(filestore.FILES_ROOT))],
+        f"{functions.FUNCTIONS[key].folder}: add folder {name}",
+        author_name=user.display_name, author_email=user.email,
+    )
+    return list_function_folders(key, user, db)
+
+
+@router.delete("/{key}/folders", response_model=FileOpResult)
+def delete_function_folder(
+    key: str,
+    path: str,
+    user: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> dict:
+    """Recursively delete a folder + its files (risk-routed; sensitive paths
+    queue for approval). The function root itself cannot be deleted."""
+    _resolve_stream(key, user, db)
+    rel, full = _func_subpath(key, path)
+    if not rel:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "cannot delete the function root")
+    if not (filestore.FILES_ROOT / full).is_dir():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "folder not found")
+    status_, rec = commit_path.route_folder_delete(
+        db, rel_path=full, function=key, user=user, summary=f"Delete folder {rel}"
+    )
+    return {"status": status_, "proposal_id": rec.id if rec else None}
 
 
 @home_router.get("", response_model=HomeOut)
