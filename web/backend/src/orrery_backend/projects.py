@@ -15,6 +15,7 @@ from fastapi import (
     BackgroundTasks,
     Depends,
     File,
+    Form,
     HTTPException,
     UploadFile,
     status,
@@ -23,7 +24,7 @@ from sqlalchemy import select
 from sqlalchemy import text as sqltext
 from sqlalchemy.orm import Session as DbSession
 
-from orrery_lib import docstore
+from orrery_lib import docstore, filestore
 
 from . import commit_path, functions, projectstore
 from .auth import current_user
@@ -41,6 +42,9 @@ from .models import (
 from .projectstore import create_project_tree
 from .schemas import (
     ContainerFile,
+    FileOpResult,
+    FolderCreateIn,
+    FsTreeNode,
     ProjectIn,
     ProjectOut,
     SearchHit,
@@ -48,6 +52,7 @@ from .schemas import (
     TaskDocOut,
     TaskIn,
     TaskOut,
+    TimelineDateIn,
     TimelineNode,
     TimelineNoteIn,
 )
@@ -112,10 +117,14 @@ def create_project(
     body: ProjectIn, user: User = Depends(current_user), db: DbSession = Depends(get_db)
 ) -> ProjectOut:
     slug = unique_slug(db, body.name)
+    # A project belongs to the function it was created under, so it only shows
+    # on that function's page. Defaults to engineering if unspecified/unknown.
+    fn = body.function if body.function in functions.ACTIVE_FUNCTIONS else _PROJECT_FUNCTION
     project = Project(
         name=body.name,
         slug=slug,
         description=body.description,
+        function=fn,
         created_by=user.id,
     )
     db.add(project)
@@ -359,6 +368,42 @@ def set_timeline_note(
     return None
 
 
+@router.post("/{project_id}/timeline/date", status_code=status.HTTP_204_NO_CONTENT)
+def set_timeline_date(
+    project_id: uuid.UUID,
+    body: TimelineDateIn,
+    user: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> None:
+    """Move a timeline item to a different day — an action item (task:<id> →
+    due_date) or a dropped doc/email (doc:<id> → occurred_at, at noon UTC).
+    Native git-scanned files (file:) are dated by git and not editable here."""
+    container = get_container(project_id, user, db)
+    nid = body.node_id
+    try:
+        y, m, d = (int(x) for x in body.date.split("-"))
+        when = datetime(y, m, d, 12, 0, tzinfo=timezone.utc)
+    except (ValueError, TypeError):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "bad date")
+
+    if nid.startswith("task:"):
+        task = db.get(Task, uuid.UUID(nid[5:]))
+        if task is None or task.project_id != project_id:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "item not found")
+        task.due_date = when.date()
+        task.synthesized = "pending"
+    elif nid.startswith("doc:"):
+        cat = db.get(Catalog, uuid.UUID(nid[4:]))
+        if cat is None or not _catalog_in_container(cat, container):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "item not found")
+        cat.occurred_at = when
+        cat.synthesized = "pending"
+    else:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "date not editable for this item")
+    db.commit()
+    return None
+
+
 async def _read_upload(file: UploadFile) -> bytes:
     data = await file.read()
     if not data:
@@ -409,16 +454,128 @@ async def upload_document(
     project_id: uuid.UUID,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
+    dir: str | None = Form(None),
     user: User = Depends(current_user),
     db: DbSession = Depends(get_db),
 ) -> dict:
     """Drop a file onto the project's timeline (Tier 0/1 via commit_path).
-    Regular files are dated now; .eml emails by their sent/received header."""
+    Regular files are dated now; .eml emails by their sent/received header.
+    `dir` (a folder from the project tree) overrides the attachments/ landing."""
     require_membership(project_id, user, db)
     project = db.get(Project, project_id)
     assert project is not None
+    dest_dir: str | None = None
+    if dir:
+        root = f"projects/{project.slug}"
+        norm = dir.strip().strip("/").replace("\\", "/")
+        if ".." in norm.split("/") or not (norm == root or norm.startswith(root + "/")):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "target outside project")
+        dest_dir = norm
     data = await _read_upload(file)
-    return _doc_node(ingest_timeline_drop(db, project, data, file.filename, user, background_tasks))
+    return _doc_node(
+        ingest_timeline_drop(
+            db, project, data, file.filename, user, background_tasks, dest_dir=dest_dir
+        )
+    )
+
+
+# ── Project folders (mirror the function-folder endpoints) ───────────
+
+
+def _project_subpath(project: Project, sub: str | None) -> tuple[str, str]:
+    """Validate a project-relative subpath. Returns (project-relative,
+    FILES_ROOT-relative). "" → the project root."""
+    root = f"projects/{project.slug}"
+    norm = (sub or "").strip().strip("/").replace("\\", "/")
+    if norm and (".." in norm.split("/") or norm.startswith(".")):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "invalid folder path")
+    return norm, (f"{root}/{norm}" if norm else root)
+
+
+@router.get("/{project_id}/tree", response_model=FsTreeNode)
+def project_tree(
+    project_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> dict:
+    require_membership(project_id, user, db)
+    project = db.get(Project, project_id)
+    assert project is not None
+    root = filestore.FILES_ROOT / f"projects/{project.slug}"
+    if root.exists():
+        return projectstore.build_tree(root, "root")
+    return {"name": "root", "children": []}
+
+
+@router.get("/{project_id}/folders", response_model=list[str])
+def project_folders(
+    project_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> list[str]:
+    require_membership(project_id, user, db)
+    project = db.get(Project, project_id)
+    assert project is not None
+    base = filestore.FILES_ROOT / f"projects/{project.slug}"
+    if not base.is_dir():
+        return []
+    out = [
+        str(p.relative_to(base))
+        for p in base.rglob("*")
+        if p.is_dir() and ".git" not in p.parts
+    ]
+    return sorted(out)
+
+
+@router.post("/{project_id}/folders", response_model=list[str], status_code=status.HTTP_201_CREATED)
+def create_project_folder(
+    project_id: uuid.UUID,
+    body: FolderCreateIn,
+    user: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> list[str]:
+    require_membership(project_id, user, db)
+    project = db.get(Project, project_id)
+    assert project is not None
+    _, parent_full = _project_subpath(project, body.parent)
+    if not (filestore.FILES_ROOT / parent_full).is_dir():
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "parent folder not found")
+    name = projectstore._safe_name(body.name)
+    if not name or name in {".git", "attachments"}:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "invalid folder name")
+    new_dir = filestore.FILES_ROOT / parent_full / name
+    new_dir.mkdir(parents=True, exist_ok=True)
+    keep = new_dir / ".gitkeep"
+    if not keep.exists():
+        keep.write_text("", encoding="utf-8")
+    filestore.git_commit(
+        [str(keep.relative_to(filestore.FILES_ROOT))],
+        f"projects/{project.slug}: add folder {name}",
+        author_name=user.display_name, author_email=user.email,
+    )
+    return project_folders(project_id, user, db)
+
+
+@router.delete("/{project_id}/folders", response_model=FileOpResult)
+def delete_project_folder(
+    project_id: uuid.UUID,
+    path: str,
+    user: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> dict:
+    require_membership(project_id, user, db)
+    project = db.get(Project, project_id)
+    assert project is not None
+    rel, full = _project_subpath(project, path)
+    if not rel:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "cannot delete the project root")
+    if not (filestore.FILES_ROOT / full).is_dir():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "folder not found")
+    status_, rec = commit_path.route_folder_delete(
+        db, rel_path=full, function=project.function or "engr",
+        user=user, summary=f"Delete folder {rel}",
+    )
+    return {"status": status_, "proposal_id": rec.id if rec else None}
 
 
 @router.delete(

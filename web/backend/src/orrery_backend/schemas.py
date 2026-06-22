@@ -56,6 +56,7 @@ class AgentSummary(BaseModel):
 class ProjectIn(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     description: str | None = None
+    function: str | None = None  # the function this project belongs to (e.g. "engr")
 
 
 class ProjectOut(BaseModel):
@@ -63,6 +64,7 @@ class ProjectOut(BaseModel):
 
     id: uuid.UUID
     name: str
+    slug: str
     description: str | None
     archived: bool
     created_at: datetime
@@ -228,6 +230,11 @@ class TimelineNode(BaseModel):
 class TimelineNoteIn(BaseModel):
     node_id: str  # task:<id> | doc:<id> | file:<path>
     note: str | None = None
+
+
+class TimelineDateIn(BaseModel):
+    node_id: str  # task:<id> (due_date) | doc:<id> (occurred_at)
+    date: str  # YYYY-MM-DD (placed at noon UTC)
 
 
 # ── Conversation (persisted, keyed on user+agent+project) ───────────
