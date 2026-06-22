@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { FunctionInfo } from "../../api/client";
 import { accentOf, bodyXY, fnAbbr, GEOMETRY, STAGE, tint } from "./theme";
@@ -169,6 +169,29 @@ function Body({
   const { x, y } = bodyXY(f.key);
   const size = selected ? 72 : 56;
 
+  // Single click selects; a second click within the window opens the function
+  // page. We disambiguate manually because selecting shifts/shrinks the map,
+  // which moves the disc out from under the cursor and breaks native dblclick.
+  const clickTimer = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (clickTimer.current != null) clearTimeout(clickTimer.current);
+    },
+    [],
+  );
+  const handleClick = () => {
+    if (clickTimer.current != null) {
+      clearTimeout(clickTimer.current);
+      clickTimer.current = null;
+      onOpen();
+    } else {
+      clickTimer.current = window.setTimeout(() => {
+        clickTimer.current = null;
+        onSelect();
+      }, 240);
+    }
+  };
+
   return (
     <div
       className="absolute z-[4] flex -translate-x-1/2 -translate-y-1/2 flex-col items-center"
@@ -186,8 +209,7 @@ function Body({
       }}
     >
       <button
-        onClick={onSelect}
-        onDoubleClick={onOpen}
+        onClick={handleClick}
         className="grid place-items-center rounded-full font-semibold"
         style={{
           width: size,

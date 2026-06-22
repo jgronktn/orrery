@@ -129,6 +129,8 @@ export const api = {
 
   // Projects + tasks
   listProjects: () => request<Project[]>("/api/projects"),
+  getProject: (projectId: string) =>
+    request<Project>(`/api/projects/${projectId}`),
   createProject: (body: ProjectIn) =>
     request<Project>("/api/projects", {
       method: "POST",
@@ -175,6 +177,12 @@ export const api = {
     request<void>(`/api/projects/${projectId}/timeline/note`, {
       method: "POST",
       body: JSON.stringify({ node_id: nodeId, note }),
+    }),
+  // Move a timeline item to a different day (task due_date / doc occurred_at)
+  setTimelineDate: (projectId: string, nodeId: string, date: string) =>
+    request<void>(`/api/projects/${projectId}/timeline/date`, {
+      method: "POST",
+      body: JSON.stringify({ node_id: nodeId, date }),
     }),
   // Container-scoped file search (keyword always; semantic on toggle)
   searchContainer: (projectId: string, q: string, semantic: boolean) =>
@@ -230,14 +238,30 @@ export const api = {
   listContainerFiles: (projectId: string) =>
     request<ContainerFile[]>(`/api/projects/${projectId}/files`),
   // Drop a file onto a project's timeline (.eml dated by its sent/received header)
-  uploadDocument: (projectId: string, file: File) => {
+  uploadDocument: (projectId: string, file: File, dir?: string) => {
     const fd = new FormData();
     fd.append("file", file);
+    if (dir) fd.append("dir", dir);
     return request<TimelineNode>(`/api/projects/${projectId}/documents`, {
       method: "POST",
       body: fd,
     });
   },
+  // Project filesystem (mirrors the function folder endpoints)
+  projectTree: (projectId: string) =>
+    request<FsTreeNode>(`/api/projects/${projectId}/tree`),
+  projectFolders: (projectId: string) =>
+    request<string[]>(`/api/projects/${projectId}/folders`),
+  createProjectFolder: (projectId: string, parent: string, name: string) =>
+    request<string[]>(`/api/projects/${projectId}/folders`, {
+      method: "POST",
+      body: JSON.stringify({ parent, name }),
+    }),
+  deleteProjectFolder: (projectId: string, path: string) =>
+    request<FileOpResult>(
+      `/api/projects/${projectId}/folders?path=${encodeURIComponent(path)}`,
+      { method: "DELETE" },
+    ),
   deleteDocument: (projectId: string, documentId: string) =>
     request<void>(`/api/projects/${projectId}/documents/${documentId}`, {
       method: "DELETE",

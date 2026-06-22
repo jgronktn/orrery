@@ -1,13 +1,14 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { api, type FsTreeNode } from "../../api/client";
+import type { FsTreeNode } from "../../api/client";
 import type { PreviewFile } from "./FileViewer";
-import { accentOf } from "./theme";
 
-// Far-left filesystem panel on Company Home: a vertical tree of the selected
-// function's folder (GET /api/functions/{key}/tree). Single-clicking a file
-// opens it in the center viewer; hovering a file row reveals rename / move /
-// delete actions. Dropping a desktop file onto a folder uploads it there.
+// Container filesystem panel (used by Company Home for a function and by the
+// Project page for a project). A vertical folder tree: single-click a file to
+// open it in the viewer; hover a file row for rename / move / delete; drop a
+// desktop file onto a folder to upload there; create / delete folders. The
+// container is supplied via props (root prefix + tree/upload/op callbacks) so
+// the same panel serves both functions and projects.
 
 interface FileOps {
   folders: string[];
@@ -18,15 +19,13 @@ interface FileOps {
   onDeleteFolder: (path: string) => void;
 }
 
-// A folder's function-relative path (its tree store_path minus the leading
-// function-folder segment) — what the folder endpoints + move expect.
-function funcRel(storePath: string | null | undefined): string {
-  return storePath ? storePath.split("/").slice(1).join("/") : "";
-}
-
 export function FunctionFiles({
-  selectedKey,
-  name,
+  containerKey,
+  title,
+  accent,
+  rootPrefix,
+  loadTree,
+  upload: uploadProp,
   folders,
   reloadToken,
   onOpenFile,
@@ -37,9 +36,14 @@ export function FunctionFiles({
   onDelete,
   onAddFolder,
   onDeleteFolder,
+  variant = "panel",
 }: {
-  selectedKey: string | null;
-  name: string | null;
+  containerKey: string; // stable id; refetch the tree when it changes
+  title: string; // header label
+  accent: string;
+  rootPrefix: string; // FILES_ROOT-relative container root (for relative paths)
+  loadTree: () => Promise<FsTreeNode>;
+  upload: (file: File, dir?: string) => Promise<unknown>;
   folders: string[];
   reloadToken: number;
   onOpenFile: (file: PreviewFile) => void;
@@ -50,6 +54,8 @@ export function FunctionFiles({
   onDelete: (path: string) => void;
   onAddFolder: (parent: string, name: string) => void;
   onDeleteFolder: (path: string) => void;
+  // "panel" = fixed 520px left panel (Company Home); "fill" = fill its parent.
+  variant?: "panel" | "fill";
 }) {
   const [tree, setTree] = useState<FsTreeNode | null>(null);
   const [loading, setLoading] = useState(false);
@@ -58,52 +64,45 @@ export function FunctionFiles({
   const [newRoot, setNewRoot] = useState(false);
   const [rootDraft, setRootDraft] = useState("");
 
-  const reload = useCallback(async () => {
-    if (!selectedKey) return;
-    try {
-      setTree(await api.functionTree(selectedKey));
-    } catch {
-      /* keep the current tree on a transient error */
-    }
-  }, [selectedKey]);
+  // A folder's container-relative path (store_path minus the root prefix) —
+  // what the folder endpoints + move expect.
+  const relOf = (storePath: string | null | undefined): string =>
+    storePath && storePath.startsWith(rootPrefix + "/")
+      ? storePath.slice(rootPrefix.length + 1)
+      : "";
 
-  // Re-fetch on function change AND whenever the parent bumps reloadToken
-  // (after a successful move/delete/rename).
+  // Keep latest tree/upload closures in refs so the fetch effect can depend
+  // only on the stable containerKey + reloadToken.
+  const loadRef = useRef(loadTree);
+  loadRef.current = loadTree;
+  const uploadRef = useRef(uploadProp);
+  uploadRef.current = uploadProp;
+
   useEffect(() => {
-    if (!selectedKey) {
-      setTree(null);
-      return;
-    }
     let live = true;
     setLoading(true);
-    api
-      .functionTree(selectedKey)
+    loadRef
+      .current()
       .then((t) => live && setTree(t))
       .catch(() => live && setTree(null))
       .finally(() => live && setLoading(false));
     return () => {
       live = false;
     };
-  }, [selectedKey, reloadToken]);
+  }, [containerKey, reloadToken]);
 
-  const upload = useCallback(
-    async (dir: string | undefined, file: File) => {
-      if (!selectedKey) return;
-      setBusy(true);
-      try {
-        await api.uploadFunctionDoc(selectedKey, file, dir);
-        await reload();
-        onUploaded?.();
-      } catch {
-        /* surfaced elsewhere; keep the panel responsive */
-      } finally {
-        setBusy(false);
-      }
-    },
-    [selectedKey, reload, onUploaded],
-  );
+  const upload = async (dir: string | undefined, file: File) => {
+    setBusy(true);
+    try {
+      await uploadRef.current(file, dir);
+      onUploaded?.();
+    } catch {
+      /* surfaced elsewhere; keep the panel responsive */
+    } finally {
+      setBusy(false);
+    }
+  };
 
-  const accent = selectedKey ? accentOf(selectedKey) : "#353a32";
   const children = tree?.children ?? [];
   const ops: FileOps = {
     folders,
@@ -115,29 +114,31 @@ export function FunctionFiles({
   };
 
   return (
-    <div className="flex w-[520px] shrink-0 flex-col border-r border-line bg-paper-alt">
+    <div
+      className={
+        variant === "fill"
+          ? "flex h-full w-full flex-col bg-paper-alt"
+          : "flex w-[520px] shrink-0 flex-col border-r border-line bg-paper-alt"
+      }
+    >
       <div className="flex items-center gap-2 border-b border-line px-4 py-3.5">
-        <span
-          className="h-2 w-2 rounded-full"
-          style={{ background: selectedKey ? accent : "#c4c8b6" }}
-        />
-        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-faint">
-          {selectedKey ? `${name} files` : "Files"}
+        <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: accent }} />
+        <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.14em] text-faint">
+          {title}
         </span>
-        {busy && (
-          <span className="font-mono text-[9px] text-hint">adding…</span>
-        )}
-        {selectedKey && (
-          <button
-            onClick={() => {
-              setRootDraft("");
-              setNewRoot(true);
-            }}
-            className="ml-auto rounded border border-line-soft bg-white px-2 py-0.5 font-mono text-[10px] text-strong-alt hover:bg-rowhover"
-          >
-            ＋ New folder
-          </button>
-        )}
+        <span className="truncate font-mono text-[10px] text-hint" title={`files/${rootPrefix}/`}>
+          ( files/{rootPrefix}/ )
+        </span>
+        {busy && <span className="shrink-0 font-mono text-[9px] text-hint">adding…</span>}
+        <button
+          onClick={() => {
+            setRootDraft("");
+            setNewRoot(true);
+          }}
+          className="ml-auto rounded border border-line-soft bg-white px-2 py-0.5 font-mono text-[10px] text-strong-alt hover:bg-rowhover"
+        >
+          ＋ New folder
+        </button>
       </div>
 
       <div
@@ -155,7 +156,7 @@ export function FunctionFiles({
           if (f) void upload(undefined, f);
         }}
       >
-        {newRoot && selectedKey && (
+        {newRoot && (
           <NewFolderInput
             value={rootDraft}
             depth={0}
@@ -168,11 +169,7 @@ export function FunctionFiles({
             onCancel={() => setNewRoot(false)}
           />
         )}
-        {!selectedKey ? (
-          <p className="px-4 py-6 text-[12px] leading-relaxed text-hint">
-            Select a function to browse its files.
-          </p>
-        ) : loading ? (
+        {loading ? (
           <p className="px-4 py-6 text-[12px] text-hint">Loading…</p>
         ) : children.length === 0 ? (
           <p className="px-4 py-6 text-[12px] leading-relaxed text-hint">
@@ -185,6 +182,7 @@ export function FunctionFiles({
               node={node}
               depth={0}
               accent={accent}
+              relOf={relOf}
               onOpenFile={onOpenFile}
               onUpload={upload}
               activePath={activePath}
@@ -201,6 +199,7 @@ function TreeNode({
   node,
   depth,
   accent,
+  relOf,
   onOpenFile,
   onUpload,
   activePath,
@@ -209,6 +208,7 @@ function TreeNode({
   node: FsTreeNode;
   depth: number;
   accent: string;
+  relOf: (storePath: string | null | undefined) => string;
   onOpenFile: (file: PreviewFile) => void;
   onUpload: (dir: string | undefined, file: File) => void;
   activePath: string | null;
@@ -224,7 +224,7 @@ function TreeNode({
 
   if (isFolder) {
     const kids = node.children ?? [];
-    const rel = funcRel(node.store_path);
+    const rel = relOf(node.store_path);
     return (
       <div
         onDragOver={(e) => {
@@ -317,6 +317,7 @@ function TreeNode({
               node={c}
               depth={depth + 1}
               accent={accent}
+              relOf={relOf}
               onOpenFile={onOpenFile}
               onUpload={onUpload}
               activePath={activePath}

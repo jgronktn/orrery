@@ -10,6 +10,7 @@ import {
   type FunctionInfo,
   type Home,
   type ProposalRecord,
+  type TimelineNode,
 } from "../../api/client";
 import { FileViewer, type PreviewFile } from "./FileViewer";
 import { FunctionFiles } from "./FunctionFiles";
@@ -17,6 +18,7 @@ import { OrreryMap, type Selection } from "./OrreryMap";
 import { AskBar, ApprovalsPanel, TimelinePanel } from "./RightRail";
 import { Shell } from "./Shell";
 import { accentOf } from "./theme";
+import { isActivity } from "./timelineScale";
 
 const ENGINEERING_AGENT = "engineering";
 
@@ -35,6 +37,7 @@ export default function CompanyHome() {
   const [ask, setAsk] = useState<{ prompt: string; answer: string } | null>(null);
   const [preview, setPreview] = useState<PreviewFile | null>(null);
   const [folders, setFolders] = useState<string[]>([]);
+  const [fnTimeline, setFnTimeline] = useState<TimelineNode[]>([]);
   const [reloadToken, setReloadToken] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -91,6 +94,23 @@ export default function CompanyHome() {
       .functionFolders(fnKey)
       .then((f) => live && setFolders(f))
       .catch(() => live && setFolders([]));
+    return () => {
+      live = false;
+    };
+  }, [fnKey, reloadToken]);
+
+  // Rail timeline: scope to the selected function's activity (curated), or the
+  // company overview when nothing is selected.
+  useEffect(() => {
+    if (!fnKey) {
+      setFnTimeline([]);
+      return;
+    }
+    let live = true;
+    api
+      .functionTimeline(fnKey)
+      .then((t) => live && setFnTimeline(t))
+      .catch(() => live && setFnTimeline([]));
     return () => {
       live = false;
     };
@@ -230,8 +250,12 @@ export default function CompanyHome() {
         {/* far left — selected function's filesystem (only when one is picked) */}
         {selFn && (
           <FunctionFiles
-            selectedKey={selFn.key}
-            name={selFn.name}
+            containerKey={selFn.key}
+            title={`${selFn.name} files`}
+            accent={accentOf(selFn.key)}
+            rootPrefix={selFn.folder}
+            loadTree={() => api.functionTree(selFn.key)}
+            upload={(file, dir) => api.uploadFunctionDoc(selFn.key, file, dir)}
             folders={folders}
             reloadToken={reloadToken}
             onOpenFile={setPreview}
@@ -292,7 +316,26 @@ export default function CompanyHome() {
             {/* right — timeline · approvals · ask */}
             <aside className="flex w-[calc(35%-25px)] min-w-[330px] flex-col border-l border-line bg-paper-alt">
               <div className="flex-1 overflow-y-auto">
-                <TimelinePanel events={home?.timeline ?? []} />
+                <TimelinePanel
+              events={
+                selFn ? fnTimeline.filter(isActivity) : home?.timeline ?? []
+              }
+              scope={selFn?.name}
+              accent={selFn ? accentOf(selFn.key) : "#353a32"}
+              onDropFile={
+                selFn
+                  ? async (file) => {
+                      try {
+                        await api.uploadFunctionDoc(selFn.key, file);
+                        setReloadToken((n) => n + 1);
+                        void load();
+                      } catch (e) {
+                        setError(e instanceof ApiError ? e.message : String(e));
+                      }
+                    }
+                  : undefined
+              }
+            />
                 <ApprovalsPanel
                   approvals={approvals}
                   funcOf={funcOf}

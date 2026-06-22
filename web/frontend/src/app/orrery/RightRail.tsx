@@ -1,100 +1,41 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import type { ProposalRecord, TimelineNode } from "../../api/client";
+import { FunctionTimeline } from "./FunctionTimeline";
 import { funcLabel, risk } from "./theme";
 import { relAgo } from "./time";
 
-// ── Dark timeline panel (event sparkline) ───────────────────────────
+// ── Timeline panel — a compact version of the function-page timeline ─
 
-export function TimelinePanel({ events }: { events: TimelineNode[] }) {
-  const { bars, span } = useMemo(() => buildSpark(events), [events]);
+export function TimelinePanel({
+  events,
+  scope,
+  accent,
+  onDropFile,
+}: {
+  events: TimelineNode[];
+  scope?: string;
+  accent?: string;
+  onDropFile?: (file: File) => void;
+}) {
   return (
-    <section className="border-b border-line bg-ink p-5 text-[#f4f6ee]">
-      <div className="flex items-end justify-between">
-        <div>
-          <div className="font-mono text-[10px] tracking-[0.16em] text-[#8d917f]">
-            TIMELINE
-          </div>
-          <div className="mt-0.5 text-[15px] font-semibold tracking-tight">
-            {span.label}
-          </div>
-        </div>
-        <div className="text-right font-mono text-[10px] text-[#a7ab95]">
-          {events.length} events · {span.short}
-        </div>
+    <section className="border-b border-line bg-paper-alt">
+      <div className="flex items-center justify-between px-5 pb-1.5 pt-3.5">
+        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-faint">
+          {scope ? `${scope} · timeline` : "Timeline"}
+        </span>
+        <span className="font-mono text-[10px] text-hint">{events.length}</span>
       </div>
-      <Spark bars={bars} />
+      <div style={{ height: 180 }}>
+        <FunctionTimeline
+          nodes={events}
+          accent={accent ?? "#353a32"}
+          compact
+          onDropFile={onDropFile}
+        />
+      </div>
     </section>
   );
-}
-
-function Spark({ bars }: { bars: number[] }) {
-  const W = 296;
-  const H = 56;
-  const max = Math.max(1, ...bars);
-  const step = bars.length > 1 ? W / (bars.length - 1) : W;
-  const pts: [number, number][] = bars.map((b, i) => [
-    i * step,
-    H - (b / max) * (H - 6),
-  ]);
-  const line = pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
-  const area = `0,${H} ${line} ${W},${H}`;
-  const last = pts[pts.length - 1];
-  return (
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
-      className="mt-3 h-[76px] w-full"
-      preserveAspectRatio="none"
-    >
-      <polygon points={area} fill="#f4f6ee" opacity={0.08} />
-      <polyline
-        points={line}
-        fill="none"
-        stroke="#f4f6ee"
-        strokeWidth={1.3}
-        strokeLinejoin="round"
-      />
-      {last && (
-        <>
-          <line
-            x1={W}
-            y1={0}
-            x2={W}
-            y2={H}
-            stroke="#f4f6ee"
-            strokeWidth={1}
-            opacity={0.4}
-            strokeDasharray="2 2"
-          />
-          <circle cx={last[0]} cy={last[1]} r={2.5} fill="#f4f6ee" />
-        </>
-      )}
-    </svg>
-  );
-}
-
-function buildSpark(events: TimelineNode[]) {
-  if (events.length === 0) {
-    return { bars: [0, 0], span: { label: "No activity yet", short: "—" } };
-  }
-  const times = events.map((e) => e.time);
-  const min = Math.min(...times);
-  const max = Math.max(...times);
-  const days = Math.max(1, Math.round((max - min) / 86_400_000));
-  const N = 28;
-  const bars: number[] = new Array(N).fill(0);
-  const span = max - min || 1;
-  for (const t of times) {
-    const i = Math.min(N - 1, Math.floor(((t - min) / span) * N));
-    bars[i] = (bars[i] ?? 0) + 1;
-  }
-  return {
-    bars,
-    span: {
-      label: days <= 3 ? `Past ${days} day${days === 1 ? "" : "s"}` : `Past ${days} days`,
-      short: `${days}d`,
-    },
-  };
 }
 
 // ── Pending approvals ───────────────────────────────────────────────

@@ -222,6 +222,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/timeline/date": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set Timeline Date
+         * @description Move a timeline item to a different day — an action item (task:<id> →
+         *     due_date) or a dropped doc/email (doc:<id> → occurred_at, at noon UTC).
+         *     Native git-scanned files (file:) are dated by git and not editable here.
+         */
+        post: operations["set_timeline_date_api_projects__project_id__timeline_date_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/documents": {
         parameters: {
             query?: never;
@@ -235,9 +257,46 @@ export interface paths {
          * Upload Document
          * @description Drop a file onto the project's timeline (Tier 0/1 via commit_path).
          *     Regular files are dated now; .eml emails by their sent/received header.
+         *     `dir` (a folder from the project tree) overrides the attachments/ landing.
          */
         post: operations["upload_document_api_projects__project_id__documents_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/tree": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Project Tree */
+        get: operations["project_tree_api_projects__project_id__tree_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/folders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Project Folders */
+        get: operations["project_folders_api_projects__project_id__folders_get"];
+        put?: never;
+        /** Create Project Folder */
+        post: operations["create_project_folder_api_projects__project_id__folders_post"];
+        /** Delete Project Folder */
+        delete: operations["delete_project_folder_api_projects__project_id__folders_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -967,6 +1026,8 @@ export interface components {
         Body_upload_document_api_projects__project_id__documents_post: {
             /** File */
             file: string;
+            /** Dir */
+            dir?: string | null;
         };
         /** Body_upload_function_document_api_functions__key__documents_post */
         Body_upload_function_document_api_functions__key__documents_post: {
@@ -1152,6 +1213,8 @@ export interface components {
             name: string;
             /** Description */
             description?: string | null;
+            /** Function */
+            function?: string | null;
         };
         /** ProjectOut */
         ProjectOut: {
@@ -1162,6 +1225,8 @@ export interface components {
             id: string;
             /** Name */
             name: string;
+            /** Slug */
+            slug: string;
             /** Description */
             description: string | null;
             /** Archived */
@@ -1359,6 +1424,13 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+        };
+        /** TimelineDateIn */
+        TimelineDateIn: {
+            /** Node Id */
+            node_id: string;
+            /** Date */
+            date: string;
         };
         /** TimelineNode */
         TimelineNode: {
@@ -1820,6 +1892,39 @@ export interface operations {
             };
         };
     };
+    set_timeline_date_api_projects__project_id__timeline_date_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimelineDateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     upload_document_api_projects__project_id__documents_post: {
         parameters: {
             query?: never;
@@ -1842,6 +1947,136 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TimelineNode"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    project_tree_api_projects__project_id__tree_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FsTreeNode"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    project_folders_api_projects__project_id__folders_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_project_folder_api_projects__project_id__folders_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FolderCreateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_project_folder_api_projects__project_id__folders_delete: {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileOpResult"];
                 };
             };
             /** @description Validation Error */
