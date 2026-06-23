@@ -11,7 +11,9 @@ interface Login {
   user: string;
   cat: string;
   url: string;
+  desc: string;
   mfa: boolean;
+  note: string;
 }
 
 const KEY = "orrery-logins";
@@ -104,6 +106,8 @@ export function LoginVault({ accent, onClose }: { accent: string; onClose: () =>
               <span>Service</span>
               <span>Account</span>
               <span>Category</span>
+              <span>Description</span>
+              <span>Note</span>
               <span>MFA</span>
               <span />
             </div>
@@ -131,6 +135,12 @@ export function LoginVault({ accent, onClose }: { accent: string; onClose: () =>
                       {l.cat}
                     </span>
                   )}
+                </span>
+                <span className="truncate text-[11.5px] text-strong" title={l.desc || undefined}>
+                  {l.desc || "—"}
+                </span>
+                <span className="truncate text-[11.5px] text-muted" title={l.note || undefined}>
+                  {l.note || "—"}
                 </span>
                 <span className="font-mono text-[10px] uppercase tracking-wide" style={{ color: l.mfa ? accent : "#b05c6e" }}>
                   {l.mfa ? "on" : "off"}
@@ -175,11 +185,21 @@ function AccountForm({
   const [user, setUser] = useState(initial?.user ?? "");
   const [cat, setCat] = useState(initial?.cat ?? CATS[0]!);
   const [url, setUrl] = useState(initial?.url ?? "");
+  const [desc, setDesc] = useState(initial?.desc ?? "");
   const [mfa, setMfa] = useState(initial?.mfa ?? false);
+  const [note, setNote] = useState(initial?.note ?? "");
 
   const submit = () => {
     if (!svc.trim()) return;
-    onSave({ svc: svc.trim(), user: user.trim(), cat, url: url.trim(), mfa });
+    onSave({
+      svc: svc.trim(),
+      user: user.trim(),
+      cat,
+      url: url.trim(),
+      desc: desc.trim(),
+      mfa,
+      note: note.trim(),
+    });
   };
 
   return (
@@ -220,6 +240,20 @@ function AccountForm({
         placeholder="URL"
         className="min-w-[160px] flex-1 rounded-lg border border-line-soft bg-white px-2.5 py-1.5 text-[12.5px] text-ink outline-none placeholder:text-hint"
       />
+      <input
+        value={desc}
+        onChange={(e) => setDesc(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && submit()}
+        placeholder="Description"
+        className="min-w-[200px] flex-[2] rounded-lg border border-line-soft bg-white px-2.5 py-1.5 text-[12.5px] text-ink outline-none placeholder:text-hint"
+      />
+      <input
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && submit()}
+        placeholder="Note"
+        className="min-w-[200px] flex-[2] rounded-lg border border-line-soft bg-white px-2.5 py-1.5 text-[12.5px] text-ink outline-none placeholder:text-hint"
+      />
       <label className="flex items-center gap-1.5 text-[12px] text-muted">
         <input type="checkbox" checked={mfa} onChange={(e) => setMfa(e.target.checked)} />
         MFA
@@ -242,7 +276,7 @@ function AccountForm({
   );
 }
 
-const COLS = "1.6fr 1.6fr 1fr 0.5fr 56px";
+const COLS = "1.2fr 1.1fr 0.7fr 1.3fr 1.3fr 0.4fr 56px";
 
 function KeyGlyph() {
   return (
