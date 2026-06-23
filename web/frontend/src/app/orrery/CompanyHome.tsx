@@ -315,7 +315,15 @@ export default function CompanyHome() {
     <aside className="flex w-[calc(35%-25px)] min-w-[330px] flex-col border-l border-line bg-paper-alt">
       <div className="flex-1 overflow-y-auto">
         <TimelinePanel
-          events={selFn ? fnTimeline.filter(isActivity) : home?.timeline ?? []}
+          events={
+            selFn
+              ? fnTimeline.filter(isActivity)
+              : // Company overview (no function selected): only reminders +
+                // milestones. Every other timeline is unchanged.
+                (home?.timeline ?? []).filter(
+                  (n) => n.type === "reminder" || n.type === "milestone",
+                )
+          }
           scope={selFn?.name}
           accent={selFn ? accentOf(selFn.key) : "#353a32"}
           onDropFile={
