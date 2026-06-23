@@ -75,6 +75,7 @@ export const TYPE_COLOR: Record<string, string> = {
   task: "#a8842c",
   milestone: "#353a32",
   reminder: "#b25c72",
+  note: "#5a6e8c",
   other: "#7e8270",
 };
 export const TYPE_LABEL: Record<string, string> = {
@@ -88,6 +89,7 @@ export const TYPE_LABEL: Record<string, string> = {
   task: "Action item",
   milestone: "Milestone",
   reminder: "Reminder",
+  note: "Note",
   other: "File",
 };
 

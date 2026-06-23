@@ -13,10 +13,11 @@ export const KINDS = [
   { value: "task", label: "Action item", color: "#a8842c" },
   { value: "milestone", label: "Milestone", color: "#353a32" },
   { value: "reminder", label: "Reminder", color: "#b25c72" },
+  { value: "note", label: "Note", color: "#5a6e8c" },
 ] as const;
 
-// Display order in the composer: Reminder · Action item · Milestone.
-const CHIPS = [KINDS[2], KINDS[0], KINDS[1]];
+// Display order in the composer: Note · Reminder · Action item · Milestone.
+const CHIPS = [KINDS[3], KINDS[2], KINDS[0], KINDS[1]];
 
 export function Composer({
   kind,
@@ -124,6 +125,22 @@ export function KindGlyph({ value }: { value: string }) {
           strokeLinejoin="round"
         />
         <path d="M6.5 13a1.5 1.5 0 003 0" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (value === "note") {
+    // a small page with a folded corner + text lines
+    return (
+      <svg width="32" height="32" viewBox="0 0 16 16" aria-hidden>
+        <path
+          d="M3.5 2h6l3 3v9h-9z"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.3"
+          strokeLinejoin="round"
+        />
+        <path d="M9.5 2v3h3" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+        <path d="M5.5 8h5M5.5 10.5h5" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
       </svg>
     );
   }

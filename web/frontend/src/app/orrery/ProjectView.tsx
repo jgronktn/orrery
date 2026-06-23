@@ -415,7 +415,7 @@ function OpenItems({
   onSelect: (taskId: string) => void;
   onResolve: (id: string, okay: boolean) => void;
 }) {
-  const open = tasks.filter((t) => t.status !== "done");
+  const open = tasks.filter((t) => t.status !== "done" && t.kind !== "note");
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
