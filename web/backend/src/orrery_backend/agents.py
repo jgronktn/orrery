@@ -34,7 +34,7 @@ from .models import (
     ProposalRecord,
     User,
 )
-from .projects import get_container
+from .projects import _container_rel_root, get_container
 from .schemas import AgentSummary, MessageOut, SendMessageIn
 from .security import sign_agent_callback
 from .slack import notify_approval
@@ -145,6 +145,10 @@ async def send_message(
         project_context = {
             "project_id": str(body.project_id),
             "project_name": project.name if project else None,
+            # The container's FILES_ROOT-relative folder, so the agent can scope
+            # its file tools to this project/stream (where dropped files + emails
+            # live) rather than only the engineering corpus.
+            "folder": _container_rel_root(project) if project else None,
         }
         # Mint a short-lived callback token so the agent can reach the
         # /internal/agent API (tasks + research log) for this project.

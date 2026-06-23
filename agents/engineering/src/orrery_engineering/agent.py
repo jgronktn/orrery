@@ -65,13 +65,15 @@ def build_agent() -> Agent[EngineeringDeps, str]:
     async def search_files(
         ctx: RunContext[EngineeringDeps], query: str, k: int = 5
     ) -> list[dict] | str:
-        """Search the company's engineering documents (specs, SOWs,
-        design docs, testing checklists, certifications, templates) on
-        the file server by keyword — matches both filenames and the text
-        content of Markdown/text/Word files (PDFs match by filename
-        only). Use this FIRST for any question about what the company has
-        documented. Returns up to k hits, each with the file's `path`,
-        name, and a snippet. Read-only.
+        """Search the documents you can see (specs, SOWs, design docs,
+        testing checklists, certifications, templates, and — inside a
+        project conversation — that project's own files and emails) by
+        keyword. Matches filenames and the text content of
+        Markdown/text/Word/email(.eml) files (PDFs match by filename only).
+        Use this FIRST for any question about what's documented. Returns up
+        to k hits, each with the file's `path` (relative to the file-store
+        root, e.g. 'projects/leak-sensor/attachments/note.eml'), name, and a
+        snippet. Read-only.
         """
         try:
             hits = ctx.deps.files.search(query, k=k)
@@ -80,14 +82,40 @@ def build_agent() -> Agent[EngineeringDeps, str]:
         return [{"path": h.path, "name": h.name, "snippet": h.snippet} for h in hits]
 
     @agent.tool
+    async def list_directory(
+        ctx: RunContext[EngineeringDeps], path: str = ""
+    ) -> list[dict] | str:
+        """List the contents of a folder in the document store. Omit `path`
+        (or pass '') to see the top-level folders you can reach — the
+        engineering corpus and, in a project conversation, that project's
+        folder ('projects/<slug>'). Pass a folder `path` (e.g.
+        'projects/leak-sensor/attachments' or 'engineering/specs') to list it.
+        Returns each entry's `name`, `type` ('dir' or 'file'), and `path` —
+        feed a file path to read_file, or a folder path back into
+        list_directory to go deeper. Dropped files and emails land in the
+        container's 'attachments/' folder. Read-only.
+        """
+        try:
+            return ctx.deps.files.list_dir(path)
+        except (FileNotFoundError, NotADirectoryError):
+            return (
+                f"No folder at '{path}'. It may be a file (use read_file) or "
+                "may not exist — list a parent folder or use search_files."
+            )
+        except Exception as exc:  # pragma: no cover - surfaced to the model
+            return f"LIST DIRECTORY ERROR: {exc}"
+
+    @agent.tool
     async def read_file(
         ctx: RunContext[EngineeringDeps], path: str
     ) -> str:
-        """Read an engineering document by its `path` (from search_files
-        results, e.g. 'specs/spec-relay-5A.pdf'). Returns the text for
-        Markdown/text/Word files. For PDFs and other binaries it returns
-        the file's location to open directly — do not guess their
-        contents. Read-only.
+        """Read a document by its `path` (from search_files or list_directory,
+        e.g. 'engineering/specs/spec-relay-5A.pdf' or
+        'projects/leak-sensor/attachments/note.eml'). Returns the text for
+        Markdown/text/Word files and parsed email files (.eml — headers, body,
+        and attachment names). For PDFs and other binaries it returns the
+        file's location to open directly — do not guess their contents.
+        Read-only.
         """
         try:
             return ctx.deps.files.read(path)

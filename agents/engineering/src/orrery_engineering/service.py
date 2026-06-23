@@ -28,7 +28,7 @@ from orrery_lib.schema import (
     Risk,
 )
 
-from orrery_lib.filestore import build_engineering_reader
+from orrery_lib.filestore import build_reader
 from orrery_lib.pm import BackendClient
 
 from .agent import EngineeringDeps, _join_text, build_agent
@@ -52,7 +52,12 @@ async def run_once(req: AgentRequest) -> AgentResponse:
     backend = None
     if req.callback is not None:
         backend = BackendClient(req.callback.backend_url, req.callback.token)
-    deps = EngineeringDeps(files=build_engineering_reader(), backend=backend)
+    # Scope the file tools to the current container's folder (where dropped
+    # files + emails live) plus the engineering corpus. Outside a project the
+    # folder is absent, so the reader is engineering-only.
+    folder = (req.project_context or {}).get("folder")
+    reader = build_reader([folder] if folder else [])
+    deps = EngineeringDeps(files=reader, backend=backend)
     agent = build_agent()
     history = _to_message_history(req.conversation_history)
 
