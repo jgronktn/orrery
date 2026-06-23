@@ -17,7 +17,12 @@ import { ApprovalsPanel, AskBar } from "./RightRail";
 import { Shell } from "./Shell";
 import { accentOf } from "./theme";
 import { isActivity } from "./timelineScale";
-import { Composer, Conversation, DetailPanel } from "./timelineSurface";
+import {
+  CanvasAccordion,
+  Composer,
+  Conversation,
+  DetailPanel,
+} from "./timelineSurface";
 
 // The function page: a ~250px activity timeline + composer in the main area,
 // and a 25% right sidebar with pending approvals over the agent ask.
@@ -32,7 +37,8 @@ export default function FunctionStream() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [chatOpen, setChatOpen] = useState(false);
+  // Which canvas-pane accordion section is expanded.
+  const [pane, setPane] = useState<"projects" | "conversation">("projects");
   const [pending, setPending] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // Composer: which kind icon is armed + the title/date being entered.
@@ -75,16 +81,16 @@ export default function FunctionStream() {
   const streamId = fn?.stream_id;
 
   // Load this function-stream's persisted conversation once the agent + stream
-  // are known; open the transcript if there's any history.
+  // are known; expand the Conversation pane if there's any history.
   useEffect(() => {
-    setChatOpen(false);
+    setPane("projects");
     setMessages([]);
     if (!fn?.agent || !fn.stream_id) return;
     api
       .getMessages(fn.agent, fn.stream_id)
       .then((ms) => {
         setMessages(ms);
-        if (ms.length) setChatOpen(true);
+        if (ms.length) setPane("conversation");
       })
       .catch(() => undefined);
   }, [fn?.agent, fn?.stream_id]);
@@ -232,7 +238,7 @@ export default function FunctionStream() {
   };
   const onAsk = async (prompt: string) => {
     if (!fn?.agent) return;
-    setChatOpen(true);
+    setPane("conversation");
     setPreview(null); // surface the transcript over any open file
     setPending(prompt);
     setBusy(true);
@@ -357,18 +363,38 @@ export default function FunctionStream() {
                   onMove={onFileMove}
                   onDelete={onFileDelete}
                 />
-              ) : chatOpen ? (
-                <Conversation
-                  accent={accent}
-                  agentName={fn?.name ?? "Agent"}
-                  messages={messages}
-                  pending={pending}
-                  busy={busy}
-                  onClose={() => setChatOpen(false)}
-                  onDeleteTurn={(ids) => void onDeleteTurn(ids)}
-                />
               ) : (
-                <ProjectsList funcKey={key} accent={accent} />
+                <CanvasAccordion
+                  openId={pane}
+                  onOpen={(id) => setPane(id as "projects" | "conversation")}
+                  sections={[
+                    {
+                      id: "projects",
+                      title: "Projects",
+                      body: <ProjectsList funcKey={key} accent={accent} embedded />,
+                    },
+                    ...(fn?.agent
+                      ? [
+                          {
+                            id: "conversation",
+                            title: "Conversation",
+                            count: messages.length,
+                            body: (
+                              <Conversation
+                                embedded
+                                accent={accent}
+                                agentName={fn?.name ?? "Agent"}
+                                messages={messages}
+                                pending={pending}
+                                busy={busy}
+                                onDeleteTurn={(ids) => void onDeleteTurn(ids)}
+                              />
+                            ),
+                          },
+                        ]
+                      : []),
+                  ]}
+                />
               )}
             </div>
           </div>
@@ -417,7 +443,15 @@ export default function FunctionStream() {
   );
 }
 
-function ProjectsList({ funcKey, accent }: { funcKey: string; accent: string }) {
+function ProjectsList({
+  funcKey,
+  accent,
+  embedded,
+}: {
+  funcKey: string;
+  accent: string;
+  embedded?: boolean;
+}) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [name, setName] = useState("");
   const [editing, setEditing] = useState<Project | null>(null);
@@ -462,14 +496,16 @@ function ProjectsList({ funcKey, accent }: { funcKey: string; accent: string }) 
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
-        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-faint">
-          Projects · {projects.length}
-        </span>
-        <span className="font-mono text-[9.5px] uppercase tracking-[0.12em] text-hint">
-          Bounded work
-        </span>
-      </div>
+      {!embedded && (
+        <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
+          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-faint">
+            Projects · {projects.length}
+          </span>
+          <span className="font-mono text-[9.5px] uppercase tracking-[0.12em] text-hint">
+            Bounded work
+          </span>
+        </div>
+      )}
 
       <div className="min-h-0 flex-1 overflow-y-auto py-1">
         {projects.length === 0 ? (

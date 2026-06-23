@@ -204,16 +204,20 @@ export function Conversation({
   busy,
   onClose,
   onDeleteTurn,
+  embedded,
 }: {
   accent: string;
   agentName: string;
   messages: Message[];
   pending: string | null;
   busy: boolean;
-  onClose: () => void;
+  onClose?: () => void;
   // Remove a whole exchange: a prompt plus its response(s). Receives every
   // message id in the turn.
   onDeleteTurn?: (ids: string[]) => void;
+  // When hosted inside an accordion the parent supplies the header, so skip
+  // the internal title bar + close ✕.
+  embedded?: boolean;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -232,14 +236,16 @@ export function Conversation({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between gap-3 border-b border-line px-6 py-3">
-        <div className="font-mono text-[9.5px] uppercase tracking-[0.12em] text-hint">
-          {agentName} · conversation
+      {!embedded && (
+        <div className="flex items-center justify-between gap-3 border-b border-line px-6 py-3">
+          <div className="font-mono text-[9.5px] uppercase tracking-[0.12em] text-hint">
+            {agentName} · conversation
+          </div>
+          <button onClick={onClose} className="shrink-0 font-mono text-[12px] text-hint hover:text-strong">
+            ✕
+          </button>
         </div>
-        <button onClick={onClose} className="shrink-0 font-mono text-[12px] text-hint hover:text-strong">
-          ✕
-        </button>
-      </div>
+      )}
       <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto px-6 py-4">
         {empty ? (
           <div className="grid h-full place-items-center text-[12.5px] text-hint">
@@ -280,6 +286,48 @@ export function Conversation({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// A vertical accordion for the canvas pane: every section's header bar is
+// always visible; selecting one expands it (and collapses the others). With a
+// single section it simply stays open. Used to switch a canvas pane between
+// e.g. Projects and Conversation.
+export function CanvasAccordion({
+  sections,
+  openId,
+  onOpen,
+}: {
+  sections: { id: string; title: string; count?: number; body: React.ReactNode }[];
+  openId: string;
+  onOpen: (id: string) => void;
+}) {
+  const single = sections.length === 1;
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      {sections.map((s) => {
+        const open = single || s.id === openId;
+        return (
+          <div key={s.id} className={open ? "flex min-h-0 flex-1 flex-col" : "shrink-0"}>
+            <button
+              onClick={() => onOpen(s.id)}
+              className="flex w-full shrink-0 items-center gap-2 border-b border-line bg-paper-alt px-5 py-3 text-left hover:bg-rowhover"
+            >
+              <span className="font-mono text-[10px] leading-none text-hint" aria-hidden>
+                {open ? "▾" : "▸"}
+              </span>
+              <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-faint">
+                {s.title}
+              </span>
+              {typeof s.count === "number" && s.count > 0 && (
+                <span className="font-mono text-[10px] text-hint">· {s.count}</span>
+              )}
+            </button>
+            {open && <div className="min-h-0 flex-1 overflow-hidden">{s.body}</div>}
+          </div>
+        );
+      })}
     </div>
   );
 }

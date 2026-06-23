@@ -17,7 +17,13 @@ import { AskBar } from "./RightRail";
 import { Shell } from "./Shell";
 import { accentOf } from "./theme";
 import { isActivity } from "./timelineScale";
-import { Composer, Conversation, DetailPanel, KINDS } from "./timelineSurface";
+import {
+  CanvasAccordion,
+  Composer,
+  Conversation,
+  DetailPanel,
+  KINDS,
+} from "./timelineSurface";
 
 const PROJECT_AGENT = "engineering"; // the (only) agent attached to projects today
 
@@ -35,7 +41,6 @@ export default function ProjectView() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [chatOpen, setChatOpen] = useState(false);
   const [pending, setPending] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [addKind, setAddKind] = useState<string | null>(null);
@@ -67,15 +72,12 @@ export default function ProjectView() {
     api.getProject(id).then(setProject).catch((e) => setErr(String(e)));
   }, [id]);
   useEffect(() => {
-    // Load the persisted conversation; open the transcript if any exists.
-    setChatOpen(false);
+    // Load the persisted conversation (the canvas Conversation pane is always
+    // present; this just fills its history).
     setMessages([]);
     api
       .getMessages(PROJECT_AGENT, id)
-      .then((ms) => {
-        setMessages(ms);
-        if (ms.length) setChatOpen(true);
-      })
+      .then(setMessages)
       .catch(() => undefined);
   }, [id]);
   useEffect(() => loadTimeline(), [loadTimeline]);
@@ -220,8 +222,7 @@ export default function ProjectView() {
     }
   };
   const onAsk = async (prompt: string) => {
-    setChatOpen(true);
-    setPreview(null); // surface the transcript over any open file
+    setPreview(null); // surface the Conversation pane over any open file
     setPending(prompt);
     setBusy(true);
     try {
@@ -348,20 +349,29 @@ export default function ProjectView() {
                   onMove={onFileMove}
                   onDelete={onFileDelete}
                 />
-              ) : chatOpen ? (
-                <Conversation
-                  accent={accent}
-                  agentName="Engineering"
-                  messages={messages}
-                  pending={pending}
-                  busy={busy}
-                  onClose={() => setChatOpen(false)}
-                  onDeleteTurn={(ids) => void onDeleteTurn(ids)}
-                />
               ) : (
-                <div className="grid h-full place-items-center text-[12.5px] text-hint">
-                  Project detail — coming next.
-                </div>
+                <CanvasAccordion
+                  openId="conversation"
+                  onOpen={() => {}}
+                  sections={[
+                    {
+                      id: "conversation",
+                      title: "Conversation",
+                      count: messages.length,
+                      body: (
+                        <Conversation
+                          embedded
+                          accent={accent}
+                          agentName="Engineering"
+                          messages={messages}
+                          pending={pending}
+                          busy={busy}
+                          onDeleteTurn={(ids) => void onDeleteTurn(ids)}
+                        />
+                      ),
+                    },
+                  ]}
+                />
               )}
             </div>
           </div>
