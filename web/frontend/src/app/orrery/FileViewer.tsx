@@ -118,8 +118,8 @@ export function FileViewer({
   const alignTop = needsText && !loading && text != null;
 
   return (
-    <div className="flex flex-1 flex-col bg-paper-alt">
-      <div className="flex items-center justify-between gap-3 border-b border-line px-6 py-3.5">
+    <div className="flex min-h-0 flex-1 flex-col bg-paper-alt">
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line px-6 py-3.5">
         {act === "rename" ? (
           <input
             autoFocus
@@ -197,7 +197,7 @@ export function FileViewer({
         </div>
       </div>
       <div
-        className={`flex-1 overflow-auto p-6 ${
+        className={`min-h-0 flex-1 overflow-auto p-6 ${
           isImg || isPdf
             ? "grid place-items-center"
             : alignTop

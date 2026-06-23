@@ -33,6 +33,7 @@ _TEXT_EXT = {".md", ".markdown", ".txt", ".csv"}
 _DOCX_EXT = {".docx"}
 _PDF_EXT = {".pdf"}
 _XLSX_EXT = {".xlsx"}
+_ODT_EXT = {".odt"}
 _EML_EXT = {".eml"}
 _SNIPPET_CHARS = 240
 
@@ -120,6 +121,31 @@ def _xlsx_to_text(data: bytes) -> str:
     return "\n".join(lines).strip()
 
 
+def _odt_to_text(data: bytes) -> str:
+    from odf import teletype
+    from odf.opendocument import load
+
+    doc = load(io.BytesIO(data))
+    lines: list[str] = []
+
+    # Walk the body in document order, emitting one line per paragraph/heading.
+    # (getElementsByType(P)+getElementsByType(H) would float all headings above
+    # all paragraphs; a recursive walk preserves the real order, including text
+    # nested in tables/lists/frames.)
+    def walk(node) -> None:
+        for child in getattr(node, "childNodes", []):
+            qname = getattr(child, "qname", None)
+            if qname is not None and qname[1] in ("p", "h"):
+                text = teletype.extractText(child)
+                if text.strip():
+                    lines.append(text)
+            else:
+                walk(child)
+
+    walk(doc.text)
+    return "\n".join(lines).strip()
+
+
 def _html_to_text(html: str) -> str:
     """Crude HTML → text: drop script/style, strip tags, unescape entities.
     Good enough for reading an HTML email body; no dependency added."""
@@ -183,6 +209,8 @@ def extract_text(path: Path) -> str | None:
             return _pdf_to_text(path.read_bytes()) or None
         if ext in _XLSX_EXT:
             return _xlsx_to_text(path.read_bytes()) or None
+        if ext in _ODT_EXT:
+            return _odt_to_text(path.read_bytes()) or None
         if ext in _EML_EXT:
             return _eml_to_text(path.read_bytes()) or None
     except Exception:

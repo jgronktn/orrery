@@ -148,6 +148,41 @@ def reindex_emails() -> int:
         db.close()
 
 
+def reextract(ext: str) -> int:
+    """Re-extract text + re-index for existing catalog rows of a given ext
+    (e.g. after teaching `extract_text` a new format like .odt). Refreshes
+    extracted_text/text_extracted_at and the node `type`, and rebuilds the
+    embeddings. Idempotent."""
+    db = SessionLocal()
+    try:
+        n = 0
+        node_type = projectstore._type_for_ext(ext.lower())
+        for cat in list(db.scalars(select(Catalog).where(Catalog.ext == ext.lower()))):
+            p = filestore.FILES_ROOT / cat.path
+            if not p.is_file():
+                continue
+            text = filestore.extract_text(p)
+            cat.type = node_type
+            cat.extracted_text = text
+            cat.text_extracted_at = datetime.now(timezone.utc) if text else None
+            db.commit()
+            db.refresh(cat)
+
+            docstore.delete_file(str(cat.id))
+            if text:
+                docstore.index_file(
+                    str(cat.id), text, path=cat.path, title=cat.title,
+                    container_kind=cat.container_kind,
+                    container_id=str(cat.container_id) if cat.container_id else None,
+                    function=cat.function, source=cat.source,
+                )
+            n += 1
+        print(f"reextracted {n} {ext} file(s)")
+        return n
+    finally:
+        db.close()
+
+
 def remove_path(rel_path: str) -> bool:
     """Delete one cataloged file by its FILES_ROOT-relative path: git-remove the
     bytes, drop its embeddings, delete the catalog row. Returns False if there's

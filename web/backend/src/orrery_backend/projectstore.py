@@ -42,7 +42,7 @@ _TYPE_BY_EXT = {
     **{e: "style" for e in ("css", "scss", "sass", "less")},
     **{e: "markup" for e in ("html", "htm")},
     **{e: "data" for e in ("json", "yaml", "yml", "toml", "lock", "env", "csv")},
-    **{e: "doc" for e in ("md", "mdx", "txt", "pdf")},
+    **{e: "doc" for e in ("md", "mdx", "txt", "pdf", "odt", "docx")},
     **{e: "image" for e in ("svg", "png", "jpg", "jpeg", "gif", "webp", "ico", "mp4")},
 }
 
