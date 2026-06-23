@@ -162,14 +162,22 @@ def link_task_to_doc(
 # ── Research log ────────────────────────────────────────────────────
 
 
+def _container_rel_root(project: Project) -> str:
+    """FILES_ROOT-relative folder for the container. A function stream resolves
+    its folder via the registry (key ≠ folder); a project uses projects/<slug>."""
+    if project.kind == "function_stream":
+        fdef = functions.FUNCTIONS.get(project.function or "")
+        return fdef.folder if fdef else (project.function or "")
+    return f"projects/{project.slug}"
+
+
 @router.get("/research-log", response_model=ResearchLogOut)
 def read_research_log(
     ctx: AgentContext = Depends(agent_context),
 ) -> ResearchLogOut:
-    try:
-        content = projectstore.read_research_log(ctx.project.slug)
-    except FileNotFoundError:
-        content = ""
+    content = projectstore.read_research_log(
+        _container_rel_root(ctx.project), ctx.project.name
+    )
     return ResearchLogOut(project_id=ctx.project.id, content=content)
 
 
@@ -179,12 +187,11 @@ def append_research_log(
     ctx: AgentContext = Depends(agent_context),
 ) -> ResearchLogOut:
     attribution = f"{ctx.agent_id} agent (for {ctx.user.display_name})"
-    try:
-        content = projectstore.append_research_log(
-            ctx.project.slug, body.section, body.content, attribution
-        )
-    except ValueError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
-    except FileNotFoundError as exc:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
+    content = projectstore.append_research_log(
+        _container_rel_root(ctx.project),
+        ctx.project.name,
+        body.section,
+        body.content,
+        attribution,
+    )
     return ResearchLogOut(project_id=ctx.project.id, content=content)

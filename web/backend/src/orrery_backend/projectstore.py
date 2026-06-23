@@ -321,29 +321,64 @@ def parse_eml(data: bytes) -> tuple[datetime | None, str | None, str | None]:
     return when, msg.get("Subject"), msg.get("From")
 
 
-def read_research_log(slug: str) -> str:
-    path = research_log_path(slug)
-    if not path.exists():
-        raise FileNotFoundError(f"no research log for project {slug}")
-    return path.read_text(encoding="utf-8")
+def research_log_path_at(rel_root: str) -> Path:
+    """research-log.md for ANY container folder (FILES_ROOT-relative), e.g.
+    "projects/<slug>" (a project) or "engineering" (a function stream)."""
+    return filestore.FILES_ROOT / rel_root / "research-log.md"
 
 
-def append_research_log(slug: str, section: str, content: str, attribution: str) -> str:
-    """Append a timestamped, attributed bullet under the named section.
-    Append-only; humans edit the Markdown by hand. Returns the new log text."""
-    path = research_log_path(slug)
+def ensure_research_log(
+    rel_root: str,
+    name: str,
+    *,
+    author_name: str | None = None,
+    author_email: str | None = None,
+) -> Path:
+    """Return the container's research log, seeding it from the template (and
+    git-committing) if it doesn't exist yet. Lets any container — a project OR
+    a function stream — accumulate research notes on demand instead of only the
+    ones created with a full project tree."""
+    path = research_log_path_at(rel_root)
     if not path.exists():
-        raise FileNotFoundError(f"no research log for project {slug}")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(RESEARCH_LOG_TEMPLATE.format(name=name), encoding="utf-8")
+        filestore.git_commit(
+            [str(path.relative_to(filestore.FILES_ROOT))],
+            f"{rel_root}: seed research log",
+            author_name=author_name,
+            author_email=author_email,
+        )
+    return path
+
+
+def read_research_log(rel_root: str, name: str) -> str:
+    """Read a container's research log, seeding an empty one if it's missing."""
+    return ensure_research_log(rel_root, name).read_text(encoding="utf-8")
+
+
+def append_research_log(
+    rel_root: str, name: str, section: str, content: str, attribution: str
+) -> str:
+    """Append a timestamped, attributed bullet under the named section, seeding
+    the log — and the section heading — on demand so a reasonable request never
+    silently fails. Append-only; humans edit the Markdown by hand. Returns the
+    new log text."""
+    path = ensure_research_log(rel_root, name)
     lines = path.read_text(encoding="utf-8").splitlines()
 
-    # Find the "## <section>" heading (loose, case-insensitive match).
+    # Find the "## <section>" heading (loose, case-insensitive match). If the
+    # section isn't present, add it at the end so the note still lands instead
+    # of erroring out (and the agent then claiming a write that didn't happen).
     heading_idx = None
     for i, line in enumerate(lines):
         if line.startswith("## ") and section.lower() in line[3:].strip().lower():
             heading_idx = i
             break
     if heading_idx is None:
-        raise ValueError(f"unknown research-log section: {section!r}")
+        if lines and lines[-1].strip():
+            lines.append("")
+        lines.append(f"## {section}")
+        heading_idx = len(lines) - 1
 
     # End of section = next "## " heading or EOF.
     end = len(lines)
@@ -363,6 +398,6 @@ def append_research_log(slug: str, section: str, content: str, attribution: str)
     path.write_text(new_text, encoding="utf-8")
     filestore.git_commit(
         [str(path.relative_to(filestore.FILES_ROOT))],
-        f"projects/{slug}: research-log append to {section}",
+        f"{rel_root}: research-log append to {section}",
     )
     return new_text

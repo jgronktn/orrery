@@ -79,6 +79,17 @@ def file_raw(
     )
 
 
+# Extensions stored as plain UTF-8 on disk — read live so in-place edits and
+# appends (e.g. the agent writing to research-log.md) show immediately. Other
+# previewable types (pdf/docx) are binary and rely on the catalog's one-time
+# text extraction captured at ingestion.
+_LIVE_TEXT_EXTS = {
+    "md", "mdx", "txt", "csv", "json", "yaml", "yml", "toml", "lock", "env",
+    "ts", "tsx", "js", "jsx", "mjs", "cjs", "sh", "go", "rs", "py",
+    "css", "scss", "sass", "less", "html", "htm",
+}
+
+
 @router.get("/text")
 def file_text(
     path: str,
@@ -86,8 +97,15 @@ def file_text(
     db: DbSession = Depends(get_db),
 ) -> dict:
     """Deterministically-extracted text for preview (markdown/pdf/docx/csv).
+    Plain-text files are re-read from disk so the preview always reflects the
+    current contents; binary types fall back to the cataloged extraction.
     Null when the file type has no extractable text (e.g. images)."""
     cat = _accessible_file(path, user, db)
+    if (cat.ext or "").lower() in _LIVE_TEXT_EXTS:
+        try:
+            return {"text": _abs(cat).read_text(encoding="utf-8")}
+        except (OSError, UnicodeDecodeError):
+            pass
     return {"text": cat.extracted_text}
 
 
