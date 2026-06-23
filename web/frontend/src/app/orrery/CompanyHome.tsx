@@ -1,7 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useNavigate } from "react-router-dom";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 
 import {
   ApiError,
@@ -9,16 +14,19 @@ import {
   type FileOpResult,
   type FunctionInfo,
   type Home,
+  type Message,
   type ProposalRecord,
   type TimelineNode,
 } from "../../api/client";
 import { FileViewer, type PreviewFile } from "./FileViewer";
 import { FunctionFiles } from "./FunctionFiles";
+import { LoginVault } from "./LoginVault";
 import { OrreryMap, type Selection } from "./OrreryMap";
 import { AskBar, ApprovalsPanel, TimelinePanel } from "./RightRail";
 import { Shell } from "./Shell";
 import { accentOf } from "./theme";
 import { isActivity } from "./timelineScale";
+import { Conversation } from "./timelineSurface";
 
 const ENGINEERING_AGENT = "engineering";
 
@@ -34,20 +42,67 @@ export default function CompanyHome() {
   const [home, setHome] = useState<Home | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Selection>("company");
-  const [ask, setAsk] = useState<{ prompt: string; answer: string } | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [pending, setPending] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewFile | null>(null);
   const [folders, setFolders] = useState<string[]>([]);
   const [fnTimeline, setFnTimeline] = useState<TimelineNode[]>([]);
   const [reloadToken, setReloadToken] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
+  const [vaultOpen, setVaultOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const navigate = useNavigate();
 
+  // Faint connector lines from the PPI core to each attached-tool body. The
+  // tools live in a sibling element (different coordinate space from the
+  // scaled orrery stage), so measure both from the DOM relative to the canvas.
+  const centerRef = useRef<HTMLDivElement>(null);
+  const [toolLines, setToolLines] = useState<
+    { x1: number; y1: number; x2: number; y2: number }[]
+  >([]);
+  useLayoutEffect(() => {
+    const el = centerRef.current;
+    if (!el) {
+      setToolLines([]);
+      return;
+    }
+    const measure = () => {
+      const core = el.querySelector("[data-orrery-core]");
+      const tools = el.querySelectorAll("[data-orrery-tool]");
+      if (!core || tools.length === 0) {
+        setToolLines([]);
+        return;
+      }
+      const base = el.getBoundingClientRect();
+      const c = core.getBoundingClientRect();
+      const cx = c.left + c.width / 2 - base.left;
+      const cy = c.top + c.height / 2 - base.top;
+      setToolLines(
+        Array.from(tools).map((t) => {
+          const r = t.getBoundingClientRect();
+          return {
+            x1: cx,
+            y1: cy,
+            x2: r.left + r.width / 2 - base.left,
+            y2: r.top + r.height / 2 - base.top,
+          };
+        }),
+      );
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected, chatOpen, preview, vaultOpen]);
+
   // Changing the selected function (or returning to the company) clears any
-  // open file preview / notice — they belong to the previously-browsed folder.
+  // open file preview / notice / vault — they belong to the prior selection.
   useEffect(() => {
     setPreview(null);
     setNotice(null);
+    setVaultOpen(false);
   }, [selected]);
 
   const load = useCallback(async () => {
@@ -206,23 +261,123 @@ export default function CompanyHome() {
     ? `What's moving in ${selFn.name} right now?`
     : `What needs my attention across ${company} today?`;
 
+  // Load the conversation for the current ask context (company → global; a
+  // function → its stream). Unlike the project/function pages, the map is the
+  // centerpiece here, so we DON'T auto-open the transcript — it opens on ask.
+  const askProjectId = selFn ? selFn.stream_id : null;
+  useEffect(() => {
+    setChatOpen(false);
+    setMessages([]);
+    setPending(null);
+    if (!askAgent) return;
+    let live = true;
+    api
+      .getMessages(askAgent, askProjectId)
+      .then((ms) => live && setMessages(ms))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [askAgent, askProjectId]);
+
   const onAsk = async (prompt: string) => {
     if (!askAgent) return;
+    setChatOpen(true);
+    setPending(prompt);
     setBusy(true);
-    setAsk({ prompt, answer: "" });
     try {
-      const msgs = await api.sendMessage(askAgent, {
+      const pair = await api.sendMessage(askAgent, {
         query: prompt,
-        project_id: selFn ? selFn.stream_id : null,
+        project_id: askProjectId,
       });
-      const last = [...msgs].reverse().find((m) => m.role === "assistant");
-      setAsk({ prompt, answer: last?.content ?? "(no response)" });
+      setMessages((prev) => [...prev, ...pair]);
+      void load(); // proposals/activity may have changed
     } catch (e) {
-      setAsk({ prompt, answer: `⚠ ${e instanceof ApiError ? e.message : e}` });
+      setError(e instanceof ApiError ? e.message : String(e));
     } finally {
+      setPending(null);
       setBusy(false);
     }
   };
+  const onDeleteTurn = async (ids: string[]) => {
+    if (!askAgent) return;
+    try {
+      for (const mid of ids) await api.deleteMessage(askAgent, mid);
+      setMessages((prev) => prev.filter((m) => !ids.includes(m.id)));
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    }
+  };
+
+  // The right rail (timeline · approvals · ask) — present in the normal and
+  // vault views, but covered by the full-bleed file preview.
+  const rail = (
+    <aside className="flex w-[calc(35%-25px)] min-w-[330px] flex-col border-l border-line bg-paper-alt">
+      <div className="flex-1 overflow-y-auto">
+        <TimelinePanel
+          events={selFn ? fnTimeline.filter(isActivity) : home?.timeline ?? []}
+          scope={selFn?.name}
+          accent={selFn ? accentOf(selFn.key) : "#353a32"}
+          onDropFile={
+            selFn
+              ? async (file) => {
+                  try {
+                    await api.uploadFunctionDoc(selFn.key, file);
+                    setReloadToken((n) => n + 1);
+                    void load();
+                  } catch (e) {
+                    setError(e instanceof ApiError ? e.message : String(e));
+                  }
+                }
+              : undefined
+          }
+        />
+        <ApprovalsPanel
+          approvals={approvals}
+          funcOf={funcOf}
+          showFunc={selected === "company"}
+          scopeLabel={selFn ? selFn.name : "any function"}
+          onApprove={(id) => void resolve(id, true)}
+          onReject={(id) => void resolve(id, false)}
+        />
+      </div>
+      {askAgent ? (
+        <AskBar
+          agentName={askName}
+          scopeLabel={askScope}
+          suggestion={suggestion}
+          onAsk={(p) => void onAsk(p)}
+          busy={busy}
+        />
+      ) : (
+        <div className="border-t border-line bg-paper px-4 py-4 text-[12px] text-hint">
+          No agent assigned to {selFn?.name} yet.
+        </div>
+      )}
+    </aside>
+  );
+
+  // Far-left filesystem panel (only when a function is selected).
+  const filePanel = selFn ? (
+    <FunctionFiles
+      containerKey={selFn.key}
+      title={`${selFn.name} files`}
+      accent={accentOf(selFn.key)}
+      rootPrefix={selFn.folder}
+      loadTree={() => api.functionTree(selFn.key)}
+      upload={(file, dir) => api.uploadFunctionDoc(selFn.key, file, dir)}
+      folders={folders}
+      reloadToken={reloadToken}
+      onOpenFile={setPreview}
+      activePath={preview?.path ?? null}
+      onUploaded={() => void load()}
+      onRename={onRename}
+      onMove={onMove}
+      onDelete={onDelete}
+      onAddFolder={onAddFolder}
+      onDeleteFolder={onDeleteFolder}
+    />
+  ) : null;
 
   return (
     <Shell
@@ -247,50 +402,39 @@ export default function CompanyHome() {
         </div>
       )}
       <div className="flex h-full min-h-0">
-        {/* far left — selected function's filesystem (only when one is picked) */}
-        {selFn && (
-          <FunctionFiles
-            containerKey={selFn.key}
-            title={`${selFn.name} files`}
-            accent={accentOf(selFn.key)}
-            rootPrefix={selFn.folder}
-            loadTree={() => api.functionTree(selFn.key)}
-            upload={(file, dir) => api.uploadFunctionDoc(selFn.key, file, dir)}
-            folders={folders}
-            reloadToken={reloadToken}
-            onOpenFile={setPreview}
-            activePath={preview?.path ?? null}
-            onUploaded={() => void load()}
-            onRename={onRename}
-            onMove={onMove}
-            onDelete={onDelete}
-            onAddFolder={onAddFolder}
-            onDeleteFolder={onDeleteFolder}
-          />
-        )}
-
-        {/* A clicked file takes over the whole area right of the filesystem
-            panel — center canvas AND the right rail. */}
         {preview ? (
-          <FileViewer
-            file={preview}
-            folders={folders}
-            onClose={() => setPreview(null)}
-            onRename={onRename}
-            onMove={onMove}
-            onDelete={onDelete}
-          />
+          // A clicked file takes over the center canvas AND the right rail.
+          <>
+            {filePanel}
+            <FileViewer
+              file={preview}
+              folders={folders}
+              onClose={() => setPreview(null)}
+              onRename={onRename}
+              onMove={onMove}
+              onDelete={onDelete}
+            />
+          </>
+        ) : vaultOpen ? (
+          // The vault fills the canvas area; the right rail stays.
+          <>
+            <LoginVault accent={accentOf("it")} onClose={() => setVaultOpen(false)} />
+            {rail}
+          </>
         ) : (
           <>
+            {filePanel}
             {/* center — orrery stage; tools float near the bottom */}
-            <div className="relative flex min-w-0 flex-1 flex-col">
-              {ask ? (
-                <AskCanvas
+            <div ref={centerRef} className="relative flex min-w-0 flex-1 flex-col">
+              {chatOpen ? (
+                <Conversation
                   accent={selFn ? accentOf(selFn.key) : "#353a32"}
-                  prompt={ask.prompt}
-                  answer={ask.answer}
+                  agentName={selFn ? selFn.name : company}
+                  messages={messages}
+                  pending={pending}
                   busy={busy}
-                  onClose={() => setAsk(null)}
+                  onClose={() => setChatOpen(false)}
+                  onDeleteTurn={(ids) => void onDeleteTurn(ids)}
                 />
               ) : (
                 <>
@@ -299,6 +443,8 @@ export default function CompanyHome() {
                     selected={selected}
                     onSelect={setSelected}
                     onOpen={(key) => navigate(`/fn/${key}`)}
+                    onOpenVault={() => setVaultOpen(true)}
+                    toolLines={toolLines}
                     onDropFile={async (key, file) => {
                       try {
                         await api.uploadFunctionDoc(key, file);
@@ -312,53 +458,7 @@ export default function CompanyHome() {
                 </>
               )}
             </div>
-
-            {/* right — timeline · approvals · ask */}
-            <aside className="flex w-[calc(35%-25px)] min-w-[330px] flex-col border-l border-line bg-paper-alt">
-              <div className="flex-1 overflow-y-auto">
-                <TimelinePanel
-              events={
-                selFn ? fnTimeline.filter(isActivity) : home?.timeline ?? []
-              }
-              scope={selFn?.name}
-              accent={selFn ? accentOf(selFn.key) : "#353a32"}
-              onDropFile={
-                selFn
-                  ? async (file) => {
-                      try {
-                        await api.uploadFunctionDoc(selFn.key, file);
-                        setReloadToken((n) => n + 1);
-                        void load();
-                      } catch (e) {
-                        setError(e instanceof ApiError ? e.message : String(e));
-                      }
-                    }
-                  : undefined
-              }
-            />
-                <ApprovalsPanel
-                  approvals={approvals}
-                  funcOf={funcOf}
-                  showFunc={selected === "company"}
-                  scopeLabel={selFn ? selFn.name : "any function"}
-                  onApprove={(id) => void resolve(id, true)}
-                  onReject={(id) => void resolve(id, false)}
-                />
-              </div>
-              {askAgent ? (
-                <AskBar
-                  agentName={askName}
-                  scopeLabel={askScope}
-                  suggestion={suggestion}
-                  onAsk={(p) => void onAsk(p)}
-                  busy={busy}
-                />
-              ) : (
-                <div className="border-t border-line bg-paper px-4 py-4 text-[12px] text-hint">
-                  No agent assigned to {selFn?.name} yet.
-                </div>
-              )}
-            </aside>
+            {rail}
           </>
         )}
       </div>
@@ -368,14 +468,17 @@ export default function CompanyHome() {
 
 function AttachedTools() {
   return (
-    <div className="pointer-events-none absolute bottom-[70px] left-1/2 flex -translate-x-1/2 flex-col items-center gap-2.5 opacity-60">
+    <div className="pointer-events-none absolute bottom-[70px] left-1/2 z-[2] flex -translate-x-1/2 flex-col items-center gap-2.5 opacity-60">
       <span className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-hint">
         Attached tools
       </span>
       <div className="flex items-center gap-20">
         {ATTACHED.map((t) => (
           <div key={t.abbr} className="flex flex-col items-center gap-1.5">
-            <span className="grid h-12 w-12 place-items-center rounded-full border border-dashed border-line-soft bg-white font-mono text-[14px] text-hint">
+            <span
+              data-orrery-tool
+              className="grid h-12 w-12 place-items-center rounded-full border border-dashed border-line-soft bg-white font-mono text-[14px] text-hint"
+            >
               {t.abbr}
             </span>
             <span className="font-mono text-[12px] text-hint-alt">{t.name}</span>
@@ -386,50 +489,3 @@ function AttachedTools() {
   );
 }
 
-function AskCanvas({
-  accent,
-  prompt,
-  answer,
-  busy,
-  onClose,
-}: {
-  accent: string;
-  prompt: string;
-  answer: string;
-  busy: boolean;
-  onClose: () => void;
-}) {
-  return (
-    <div className="flex flex-1 flex-col bg-paper-alt">
-      <div className="flex items-start justify-between gap-4 border-b border-line px-8 py-4">
-        <div className="min-w-0">
-          <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-hint">
-            You asked
-          </div>
-          <div className="mt-1 text-[16px] font-semibold text-ink">{prompt}</div>
-        </div>
-        <button
-          onClick={onClose}
-          className="shrink-0 rounded-lg border border-line-soft bg-white px-3 py-1 text-[12px] text-strong-alt hover:bg-rowhover"
-        >
-          ‹ Back to map
-        </button>
-      </div>
-      <div className="flex-1 overflow-y-auto px-8 py-6">
-        {busy && !answer ? (
-          <div className="flex items-center gap-2 text-[13px] text-hint">
-            <span
-              className="h-2 w-2 animate-orrery-pulse rounded-full"
-              style={{ background: accent }}
-            />
-            Thinking…
-          </div>
-        ) : (
-          <div className="prose-orrery max-w-[680px] text-[14px] leading-relaxed text-strong">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{answer}</ReactMarkdown>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}

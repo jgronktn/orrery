@@ -47,6 +47,7 @@ from .schemas import (
     FsTreeNode,
     ProjectIn,
     ProjectOut,
+    ProjectUpdate,
     SearchHit,
     TaskDocLinkIn,
     TaskDocOut,
@@ -194,6 +195,35 @@ def get_project(
         membership = require_membership(project_id, user, db)
         role = membership.role
     return _to_out(project, role)
+
+
+@router.patch("/{project_id}", response_model=ProjectOut)
+def update_project(
+    project_id: uuid.UUID,
+    body: ProjectUpdate,
+    user: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> ProjectOut:
+    """Edit a project's display details (name, description). The slug and its
+    on-disk folder (projects/<slug>/) are intentionally left unchanged — git
+    history, timeline dates, and cataloged file paths all key on that slug, so
+    the stable filesystem identity is decoupled from the editable label."""
+    project = db.get(Project, project_id)
+    if project is None or project.kind != "project":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "project not found")
+    membership = require_membership(project_id, user, db)
+    if body.name is not None:
+        name = body.name.strip()
+        if not name:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY, "name cannot be empty"
+            )
+        project.name = name
+    if body.description is not None:
+        project.description = body.description.strip() or None
+    db.commit()
+    db.refresh(project)
+    return _to_out(project, membership.role)
 
 
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024

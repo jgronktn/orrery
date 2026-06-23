@@ -4,6 +4,7 @@ import { useParams } from "react-router-dom";
 import {
   ApiError,
   api,
+  type Message,
   type Project,
   type ProposalRecord,
   type Task,
@@ -16,7 +17,7 @@ import { AskBar } from "./RightRail";
 import { Shell } from "./Shell";
 import { accentOf } from "./theme";
 import { isActivity } from "./timelineScale";
-import { AskAnswer, Composer, DetailPanel, KINDS } from "./timelineSurface";
+import { Composer, Conversation, DetailPanel, KINDS } from "./timelineSurface";
 
 const PROJECT_AGENT = "engineering"; // the (only) agent attached to projects today
 
@@ -33,7 +34,9 @@ export default function ProjectView() {
   const [err, setErr] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
-  const [ask, setAsk] = useState<{ prompt: string; answer: string } | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [pending, setPending] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [addKind, setAddKind] = useState<string | null>(null);
   const [addTitle, setAddTitle] = useState("");
@@ -62,6 +65,18 @@ export default function ProjectView() {
 
   useEffect(() => {
     api.getProject(id).then(setProject).catch((e) => setErr(String(e)));
+  }, [id]);
+  useEffect(() => {
+    // Load the persisted conversation; open the transcript if any exists.
+    setChatOpen(false);
+    setMessages([]);
+    api
+      .getMessages(PROJECT_AGENT, id)
+      .then((ms) => {
+        setMessages(ms);
+        if (ms.length) setChatOpen(true);
+      })
+      .catch(() => undefined);
   }, [id]);
   useEffect(() => loadTimeline(), [loadTimeline]);
   useEffect(() => loadTasks(), [loadTasks]);
@@ -205,16 +220,29 @@ export default function ProjectView() {
     }
   };
   const onAsk = async (prompt: string) => {
+    setChatOpen(true);
+    setPreview(null); // surface the transcript over any open file
+    setPending(prompt);
     setBusy(true);
-    setAsk({ prompt, answer: "" });
     try {
-      const msgs = await api.sendMessage(PROJECT_AGENT, { query: prompt, project_id: id });
-      const last = [...msgs].reverse().find((m) => m.role === "assistant");
-      setAsk({ prompt, answer: last?.content ?? "(no response)" });
+      const pair = await api.sendMessage(PROJECT_AGENT, { query: prompt, project_id: id });
+      setMessages((prev) => [...prev, ...pair]);
+      // A turn may have produced proposals / tasks / files — refresh those too.
+      loadApprovals();
+      refresh();
     } catch (e) {
-      setAsk({ prompt, answer: `⚠ ${e instanceof ApiError ? e.message : e}` });
+      fail(e);
     } finally {
+      setPending(null);
       setBusy(false);
+    }
+  };
+  const onDeleteTurn = async (ids: string[]) => {
+    try {
+      for (const mid of ids) await api.deleteMessage(PROJECT_AGENT, mid);
+      setMessages((prev) => prev.filter((m) => !ids.includes(m.id)));
+    } catch (e) {
+      fail(e);
     }
   };
 
@@ -311,15 +339,7 @@ export default function ProjectView() {
               )}
             </div>
             <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-              {ask ? (
-                <AskAnswer
-                  accent={accent}
-                  prompt={ask.prompt}
-                  answer={ask.answer}
-                  busy={busy}
-                  onClose={() => setAsk(null)}
-                />
-              ) : preview ? (
+              {preview ? (
                 <FileViewer
                   file={preview}
                   folders={folders}
@@ -327,6 +347,16 @@ export default function ProjectView() {
                   onRename={onFileRename}
                   onMove={onFileMove}
                   onDelete={onFileDelete}
+                />
+              ) : chatOpen ? (
+                <Conversation
+                  accent={accent}
+                  agentName="Engineering"
+                  messages={messages}
+                  pending={pending}
+                  busy={busy}
+                  onClose={() => setChatOpen(false)}
+                  onDeleteTurn={(ids) => void onDeleteTurn(ids)}
                 />
               ) : (
                 <div className="grid h-full place-items-center text-[12.5px] text-hint">

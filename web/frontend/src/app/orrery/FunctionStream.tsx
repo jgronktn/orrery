@@ -5,6 +5,7 @@ import {
   ApiError,
   api,
   type FunctionInfo,
+  type Message,
   type Project,
   type ProposalRecord,
   type TimelineNode,
@@ -16,7 +17,7 @@ import { ApprovalsPanel, AskBar } from "./RightRail";
 import { Shell } from "./Shell";
 import { accentOf } from "./theme";
 import { isActivity } from "./timelineScale";
-import { AskAnswer, Composer, DetailPanel } from "./timelineSurface";
+import { Composer, Conversation, DetailPanel } from "./timelineSurface";
 
 // The function page: a ~250px activity timeline + composer in the main area,
 // and a 25% right sidebar with pending approvals over the agent ask.
@@ -30,7 +31,9 @@ export default function FunctionStream() {
   const [err, setErr] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
-  const [ask, setAsk] = useState<{ prompt: string; answer: string } | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [pending, setPending] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // Composer: which kind icon is armed + the title/date being entered.
   const [addKind, setAddKind] = useState<string | null>(null);
@@ -70,6 +73,22 @@ export default function FunctionStream() {
   }, [key, reloadToken]);
 
   const streamId = fn?.stream_id;
+
+  // Load this function-stream's persisted conversation once the agent + stream
+  // are known; open the transcript if there's any history.
+  useEffect(() => {
+    setChatOpen(false);
+    setMessages([]);
+    if (!fn?.agent || !fn.stream_id) return;
+    api
+      .getMessages(fn.agent, fn.stream_id)
+      .then((ms) => {
+        setMessages(ms);
+        if (ms.length) setChatOpen(true);
+      })
+      .catch(() => undefined);
+  }, [fn?.agent, fn?.stream_id]);
+
   // The opened file's timeline node (so we can zoom to it, even if curated out).
   const focusNode = preview ? nodes.find((n) => n.path === preview.path) ?? null : null;
   const shown = (() => {
@@ -213,16 +232,33 @@ export default function FunctionStream() {
   };
   const onAsk = async (prompt: string) => {
     if (!fn?.agent) return;
+    setChatOpen(true);
+    setPreview(null); // surface the transcript over any open file
+    setPending(prompt);
     setBusy(true);
-    setAsk({ prompt, answer: "" });
     try {
-      const msgs = await api.sendMessage(fn.agent, { query: prompt, project_id: fn.stream_id });
-      const last = [...msgs].reverse().find((m) => m.role === "assistant");
-      setAsk({ prompt, answer: last?.content ?? "(no response)" });
+      const pair = await api.sendMessage(fn.agent, {
+        query: prompt,
+        project_id: fn.stream_id,
+      });
+      setMessages((prev) => [...prev, ...pair]);
+      // A turn may have produced proposals / tasks / files — refresh those too.
+      loadApprovals();
+      refreshFiles();
     } catch (e) {
-      setAsk({ prompt, answer: `⚠ ${e instanceof ApiError ? e.message : e}` });
+      fail(e);
     } finally {
+      setPending(null);
       setBusy(false);
+    }
+  };
+  const onDeleteTurn = async (ids: string[]) => {
+    if (!fn?.agent) return;
+    try {
+      for (const mid of ids) await api.deleteMessage(fn.agent, mid);
+      setMessages((prev) => prev.filter((m) => !ids.includes(m.id)));
+    } catch (e) {
+      fail(e);
     }
   };
 
@@ -312,15 +348,7 @@ export default function FunctionStream() {
               />
             </div>
             <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-              {ask ? (
-                <AskAnswer
-                  accent={accent}
-                  prompt={ask.prompt}
-                  answer={ask.answer}
-                  busy={busy}
-                  onClose={() => setAsk(null)}
-                />
-              ) : preview ? (
+              {preview ? (
                 <FileViewer
                   file={preview}
                   folders={folders}
@@ -328,6 +356,16 @@ export default function FunctionStream() {
                   onRename={onFileRename}
                   onMove={onFileMove}
                   onDelete={onFileDelete}
+                />
+              ) : chatOpen ? (
+                <Conversation
+                  accent={accent}
+                  agentName={fn?.name ?? "Agent"}
+                  messages={messages}
+                  pending={pending}
+                  busy={busy}
+                  onClose={() => setChatOpen(false)}
+                  onDeleteTurn={(ids) => void onDeleteTurn(ids)}
                 />
               ) : (
                 <ProjectsList funcKey={key} accent={accent} />
@@ -382,6 +420,7 @@ export default function FunctionStream() {
 function ProjectsList({ funcKey, accent }: { funcKey: string; accent: string }) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [name, setName] = useState("");
+  const [editing, setEditing] = useState<Project | null>(null);
   const navigate = useNavigate();
 
   const load = useCallback(() => {
@@ -409,6 +448,18 @@ function ProjectsList({ funcKey, accent }: { funcKey: string; accent: string }) 
     }
   };
 
+  const saveEdit = async (id: string, vals: { name: string; description: string }) => {
+    const n = vals.name.trim();
+    if (!n) return;
+    try {
+      await api.updateProject(id, { name: n, description: vals.description.trim() });
+      setEditing(null);
+      load();
+    } catch {
+      /* surfaced elsewhere */
+    }
+  };
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
@@ -426,31 +477,53 @@ function ProjectsList({ funcKey, accent }: { funcKey: string; accent: string }) 
             No projects yet — start one below.
           </p>
         ) : (
-          projects.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => navigate(`/project/${p.id}`)}
-              className="group flex w-full items-center gap-3 px-5 py-2 text-left hover:bg-rowhover"
-            >
-              <span
-                className="h-1.5 w-1.5 shrink-0 rounded-full"
-                style={{ background: accent }}
+          projects.map((p) =>
+            editing?.id === p.id ? (
+              <ProjectEditRow
+                key={p.id}
+                project={p}
+                accent={accent}
+                onSave={(vals) => void saveEdit(p.id, vals)}
+                onCancel={() => setEditing(null)}
               />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[13px] font-medium text-strong">
-                  {p.name}
-                </span>
-                {p.description && (
-                  <span className="block truncate text-[11.5px] text-hint">
-                    {p.description}
+            ) : (
+              <div
+                key={p.id}
+                className="group flex w-full items-center gap-2 px-5 py-2 hover:bg-rowhover"
+              >
+                <button
+                  onClick={() => navigate(`/project/${p.id}`)}
+                  className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                >
+                  <span
+                    className="h-1.5 w-1.5 shrink-0 rounded-full"
+                    style={{ background: accent }}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13px] font-medium text-strong">
+                      {p.name}
+                    </span>
+                    {p.description && (
+                      <span className="block truncate text-[11.5px] text-hint">
+                        {p.description}
+                      </span>
+                    )}
                   </span>
-                )}
-              </span>
-              <span className="font-mono text-[14px] text-line-soft group-hover:text-hint">
-                ›
-              </span>
-            </button>
-          ))
+                </button>
+                <button
+                  onClick={() => setEditing(p)}
+                  title="Edit project details"
+                  aria-label="Edit project details"
+                  className="grid h-6 w-6 shrink-0 place-items-center rounded text-hint opacity-0 hover:bg-line hover:text-strong group-hover:opacity-100"
+                >
+                  <PencilGlyph />
+                </button>
+                <span className="font-mono text-[14px] text-line-soft group-hover:text-hint">
+                  ›
+                </span>
+              </div>
+            ),
+          )
         )}
       </div>
 
@@ -472,6 +545,83 @@ function ProjectsList({ funcKey, accent }: { funcKey: string; accent: string }) 
         </button>
       </div>
     </div>
+  );
+}
+
+function ProjectEditRow({
+  project,
+  accent,
+  onSave,
+  onCancel,
+}: {
+  project: Project;
+  accent: string;
+  onSave: (vals: { name: string; description: string }) => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState(project.name);
+  const [description, setDescription] = useState(project.description ?? "");
+  const submit = () => onSave({ name, description });
+
+  return (
+    <div className="flex flex-col gap-2 border-y border-line bg-paper px-5 py-3">
+      <input
+        autoFocus
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") submit();
+          else if (e.key === "Escape") onCancel();
+        }}
+        placeholder="Project name"
+        className="w-full rounded-lg border border-line-soft bg-white px-3 py-1.5 text-[13px] font-medium text-ink outline-none placeholder:text-hint"
+      />
+      <input
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") submit();
+          else if (e.key === "Escape") onCancel();
+        }}
+        placeholder="Description (optional)"
+        className="w-full rounded-lg border border-line-soft bg-white px-3 py-1.5 text-[12.5px] text-ink outline-none placeholder:text-hint"
+      />
+      <div className="flex items-center justify-between gap-2">
+        <span className="truncate font-mono text-[10px] text-faint" title={`files/projects/${project.slug}/`}>
+          files/projects/{project.slug}/ · unchanged
+        </span>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            onClick={onCancel}
+            className="rounded-lg border border-line-soft bg-white px-3 py-1 text-[12px] text-strong-alt hover:bg-rowhover"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={submit}
+            disabled={!name.trim()}
+            className="rounded-lg px-3 py-1 text-[12px] font-medium text-white disabled:opacity-40"
+            style={{ background: accent }}
+          >
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PencilGlyph() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden>
+      <path
+        d="M11 2.5l2.5 2.5L6 12.5 3 13l.5-3z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 

@@ -13,6 +13,7 @@ export type RegisterIn = components["schemas"]["RegisterIn"];
 export type LoginIn = components["schemas"]["LoginIn"];
 export type Project = components["schemas"]["ProjectOut"];
 export type ProjectIn = components["schemas"]["ProjectIn"];
+export type ProjectUpdate = components["schemas"]["ProjectUpdate"];
 export type Task = components["schemas"]["TaskOut"];
 export type Message = components["schemas"]["MessageOut"];
 export type SendMessageIn = components["schemas"]["SendMessageIn"];
@@ -134,6 +135,11 @@ export const api = {
   createProject: (body: ProjectIn) =>
     request<Project>("/api/projects", {
       method: "POST",
+      body: JSON.stringify(body),
+    }),
+  updateProject: (projectId: string, body: ProjectUpdate) =>
+    request<Project>(`/api/projects/${projectId}`, {
+      method: "PATCH",
       body: JSON.stringify(body),
     }),
   listTasks: (projectId: string) =>

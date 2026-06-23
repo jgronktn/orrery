@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { TimelineNode } from "../../api/client";
-import { fmtTick, niceStep, typeColor, typeLabel } from "./timelineScale";
+import { fmtDate, fmtTick, niceStep, typeColor, typeLabel } from "./timelineScale";
 
 // Horizontal activity timeline: a time axis at the vertical center with
 // zoom-dependent tick marks. Zoom-in is capped so one day fills the width;
@@ -12,7 +12,9 @@ import { fmtTick, niceStep, typeColor, typeLabel } from "./timelineScale";
 
 const DAY = 86_400_000;
 const YEARS6 = 6 * 365 * DAY; // widest view: 3 years back … 3 years forward
-const TAG_AT = 0.2; // tags appear once one day spans ≥ 20% of the width
+// Day-width (px) at/above which we're at the "week boundary" zoom: weekends
+// shade, every day ticks, and events become name/type tags.
+const WEEK_PX = 14;
 
 interface Dims {
   cardW: number;
@@ -128,14 +130,52 @@ export function FunctionTimeline({
 
   const xAt = (t: number) => W / 2 + (t - center) * pxPerMs;
   const timeAt = (x: number) => center + (x - W / 2) / pxPerMs;
-  const tagMode = pxPerMs >= dayPpm * TAG_AT;
+  const dayW = DAY * pxPerMs;
+  // Events show as name/type tags (vs. dots) once we reach the week-boundary
+  // zoom (where weekends shade + days tick) and finer; dots when more zoomed out.
+  const tagMode = dayW >= WEEK_PX;
 
   const step = niceStep(pxPerMs, compact ? 96 : 150);
   const tMin = timeAt(0);
   const tMax = timeAt(W);
-  const ticks: number[] = [];
-  for (let t = Math.ceil(tMin / step) * step; t <= tMax && ticks.length < 60; t += step) {
-    ticks.push(t);
+  const hourLevel = step < DAY;
+  // Once days are wide enough to read (week level and finer), tick every day
+  // and shade weekends; label every day if there's room, else only Mondays.
+  const perDay = !hourLevel && dayW >= WEEK_PX;
+  const labelEveryDay = dayW >= 46;
+
+  const ticks: { t: number; label: string | null; boundary?: boolean }[] = [];
+  if (perDay) {
+    let day = Math.floor(tMin / DAY) * DAY;
+    for (let g = 0; day <= tMax && g < 400; day += DAY, g++) {
+      const isMon = new Date(day).getUTCDay() === 1; // Monday (UTC)
+      ticks.push({ t: day, label: labelEveryDay || isMon ? fmtDate(day) : null });
+    }
+  } else {
+    for (let t = Math.ceil(tMin / step) * step; t <= tMax && ticks.length < 80; t += step) {
+      // In hour mode, mark UTC-midnight ticks as day boundaries (rendered heavier).
+      ticks.push({ t, label: fmtTick(t, step), boundary: hourLevel && t % DAY === 0 });
+    }
+  }
+
+  // At the hour level the ticks only show HH:MM, so float a date over each day
+  // (anchored to the day's center, so it moves with the timeline as you pan).
+  const hourDayLabels: { x: number; label: string }[] = [];
+  if (hourLevel) {
+    let day = Math.floor(tMin / DAY) * DAY;
+    for (let g = 0; day <= tMax && g < 12; day += DAY, g++) {
+      hourDayLabels.push({ x: xAt(day + DAY / 2), label: fmtDate(day) });
+    }
+  }
+
+  // Shade Saturday/Sunday columns (non-working days; delimit the work week).
+  const weekendBands: { x: number; w: number }[] = [];
+  if (dayW >= WEEK_PX) {
+    let day = Math.floor(tMin / DAY) * DAY;
+    for (let g = 0; day <= tMax && g < 400; day += DAY, g++) {
+      const dow = new Date(day).getUTCDay(); // 0 Sun … 6 Sat (UTC)
+      if (dow === 0 || dow === 6) weekendBands.push({ x: xAt(day), w: dayW });
+    }
   }
 
   const visible = nodes.filter((n) => {
@@ -223,21 +263,35 @@ export function FunctionTimeline({
       }
     >
       <svg width={W} height={H} className="absolute inset-0">
+        {weekendBands.map((b, i) => (
+          <rect key={i} x={b.x} y={0} width={b.w} height={H} fill="#9ba08b" opacity={0.16} />
+        ))}
         <line x1={0} y1={axisY} x2={W} y2={axisY} stroke="#d2d6c2" strokeWidth={1.5} />
-        {ticks.map((t) => {
-          const x = xAt(t);
+        {ticks.map((tk) => {
+          const x = xAt(tk.t);
+          const big = tk.label != null; // labeled (day / Monday) ticks read stronger
+          const bnd = tk.boundary; // day boundary (midnight) in hour mode
           return (
-            <g key={t}>
-              <line x1={x} y1={axisY - 5} x2={x} y2={axisY + 5} stroke="#c4c8b6" strokeWidth={1} />
-              <text
-                x={x}
-                y={axisY + (compact ? 16 : 20)}
-                textAnchor="middle"
-                className="fill-faint font-mono"
-                style={{ fontSize: compact ? 8.5 : 10 }}
-              >
-                {fmtTick(t, step)}
-              </text>
+            <g key={tk.t}>
+              <line
+                x1={x}
+                y1={axisY - (bnd ? 11 : big ? 6 : 4)}
+                x2={x}
+                y2={axisY + (bnd ? 11 : big ? 6 : 4)}
+                stroke={bnd ? "#9ba08b" : big ? "#b6bba6" : "#cdd1c1"}
+                strokeWidth={bnd ? 4 : 1}
+              />
+              {tk.label && (
+                <text
+                  x={x}
+                  y={axisY + (compact ? 16 : 20)}
+                  textAnchor="middle"
+                  className="fill-faint font-mono"
+                  style={{ fontSize: compact ? 8.5 : 10 }}
+                >
+                  {tk.label}
+                </text>
+              )}
             </g>
           );
         })}
@@ -333,6 +387,16 @@ export function FunctionTimeline({
           </button>
         );
       })}
+
+      {hourDayLabels.map((dl, i) => (
+        <div
+          key={i}
+          className="pointer-events-none absolute top-1 -translate-x-1/2 whitespace-nowrap text-center font-semibold text-strong"
+          style={{ left: dl.x, fontSize: compact ? 11 : 14 }}
+        >
+          {dl.label}
+        </div>
+      ))}
 
       {over && (onDropFile || onDropKind) && (
         <div

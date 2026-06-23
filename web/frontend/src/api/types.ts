@@ -158,7 +158,14 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Update Project
+         * @description Edit a project's display details (name, description). The slug and its
+         *     on-disk folder (projects/<slug>/) are intentionally left unchanged — git
+         *     history, timeline dates, and cataloged file paths all key on that slug, so
+         *     the stable filesystem identity is decoupled from the editable label.
+         */
+        patch: operations["update_project_api_projects__project_id__patch"];
         trace?: never;
     };
     "/api/projects/{project_id}/facets": {
@@ -1249,6 +1256,13 @@ export interface components {
              */
             role: string;
         };
+        /** ProjectUpdate */
+        ProjectUpdate: {
+            /** Name */
+            name?: string | null;
+            /** Description */
+            description?: string | null;
+        };
         /**
          * Proposal
          * @description An action the agent proposes; a human approves before it executes.
@@ -1774,6 +1788,41 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_project_api_projects__project_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectUpdate"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

@@ -15,13 +15,19 @@ export function OrreryMap({
   selected,
   onSelect,
   onOpen,
+  onOpenVault,
   onDropFile,
+  toolLines = [],
 }: {
   functions: FunctionInfo[];
   selected: Selection;
   onSelect: (s: Selection) => void;
   onOpen: (key: string) => void;
+  onOpenVault?: () => void;
   onDropFile: (key: string, file: File) => void;
+  // Faint connector lines (core → attached tools), measured by the parent in
+  // this map's coordinate space; drawn above the gradient, behind the bodies.
+  toolLines?: { x1: number; y1: number; x2: number; y2: number }[];
 }) {
   const accent = selected !== "company" ? accentOf(selected) : "#353a32";
   const selGeo = selected !== "company" ? GEOMETRY[selected] : undefined;
@@ -36,6 +42,24 @@ export function OrreryMap({
 
   return (
     <div className="relative grid flex-1 place-items-center overflow-hidden bg-[radial-gradient(circle_at_50%_46%,#F5F7EE_0%,#EBEEE1_62%,#E4E7D9_100%)]">
+      {/* core → attached-tool tethers: above the gradient, behind everything
+          else (placed first so it paints under the stage's bodies) */}
+      {toolLines.length > 0 && (
+        <svg className="pointer-events-none absolute inset-0 z-0 h-full w-full">
+          {toolLines.map((l, i) => (
+            <line
+              key={i}
+              x1={l.x1}
+              y1={l.y1}
+              x2={l.x2}
+              y2={l.y2}
+              stroke="#9ba08b"
+              strokeWidth={1}
+              opacity={0.3}
+            />
+          ))}
+        </svg>
+      )}
       <div
         className="relative"
         style={{
@@ -71,6 +95,7 @@ export function OrreryMap({
 
         {/* company core */}
         <button
+          data-orrery-core
           onClick={() => onSelect("company")}
           className="absolute left-1/2 top-1/2 z-[3] grid -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-ink text-center shadow-[0_0_0_10px_rgba(27,26,23,.06),0_20px_44px_-16px_rgba(27,26,23,.6)]"
           style={{ width: 112, height: 112 }}
@@ -102,8 +127,65 @@ export function OrreryMap({
             onDropFile={onDropFile}
           />
         ))}
+
+        {/* IT credential vault — a small moon beside the IT body when selected */}
+        {selected === "it" && onOpenVault && <VaultMoon onOpen={onOpenVault} />}
       </div>
     </div>
+  );
+}
+
+function VaultMoon({ onOpen }: { onOpen: () => void }) {
+  const accent = accentOf("it");
+  const { x, y } = bodyXY("it");
+  const moon = Math.round(72 * 0.6); // 60% of the selected disc
+  // Place the moon radially outward along IT's orbit, 30px past the disc edge,
+  // so the center-to-center connector runs at a slight angle.
+  const dist = 36 + 30 + moon / 2;
+  const ang = GEOMETRY.it?.a ?? 18; // IT's orbital angle (deg)
+  const rad = (ang * Math.PI) / 180;
+  const mx = x + dist * Math.cos(rad);
+  const my = y + dist * Math.sin(rad);
+
+  return (
+    <>
+      {/* connector along IT's radial, nudged up a touch, behind the discs */}
+      <div
+        className="absolute z-[1]"
+        style={{
+          left: x,
+          top: y - 9,
+          width: dist,
+          height: 2,
+          background: `${accent}99`,
+          transformOrigin: "0 50%",
+          transform: `rotate(${ang}deg)`,
+        }}
+      />
+      <div
+        className="absolute z-[4] flex -translate-x-1/2 -translate-y-1/2 flex-col items-center"
+        style={{ left: mx, top: my }}
+      >
+      <button
+        onClick={onOpen}
+        title="Account logins"
+        className="grid place-items-center rounded-full bg-white"
+        style={{
+          width: moon,
+          height: moon,
+          color: accent,
+          border: `1.5px solid ${accent}66`,
+          boxShadow: `0 6px 16px -10px rgba(20,18,12,.45)`,
+        }}
+      >
+        <svg width="18" height="18" viewBox="0 0 16 16" aria-hidden>
+          <circle cx="5.5" cy="6.5" r="3" fill="none" stroke="currentColor" strokeWidth="1.4" />
+          <path d="M7.6 8.6L13 14M11 12l1.5-1.5M12.5 13.5L14 12" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+        </svg>
+      </button>
+        <span className="mt-1.5 font-mono text-[9.5px] leading-tight text-[#7e8270]">Logins</span>
+      </div>
+    </>
   );
 }
 

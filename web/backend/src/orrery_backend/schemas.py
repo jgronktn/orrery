@@ -59,6 +59,14 @@ class ProjectIn(BaseModel):
     function: str | None = None  # the function this project belongs to (e.g. "engr")
 
 
+class ProjectUpdate(BaseModel):
+    # Editable project details. The slug/folder is deliberately immutable — only
+    # the human-facing label and description change. Fields left unset are
+    # untouched; an empty `description` clears it.
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = None
+
+
 class ProjectOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

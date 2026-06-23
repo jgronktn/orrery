@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
-import { api, type TimelineNode } from "../../api/client";
+import { api, type Message, type TimelineNode } from "../../api/client";
 import { fmtClock, fmtDateY, typeLabel } from "./timelineScale";
 
 // Shared pieces of the activity-timeline surface, used by both the Function
@@ -176,6 +176,161 @@ export function AskAnswer({
   );
 }
 
+// A scrolling transcript of the persisted agent conversation: user turns and
+// assistant turns stack newest-at-bottom, with the in-flight question shown
+// optimistically while the agent is thinking.
+export function Conversation({
+  accent,
+  agentName,
+  messages,
+  pending,
+  busy,
+  onClose,
+  onDeleteTurn,
+}: {
+  accent: string;
+  agentName: string;
+  messages: Message[];
+  pending: string | null;
+  busy: boolean;
+  onClose: () => void;
+  // Remove a whole exchange: a prompt plus its response(s). Receives every
+  // message id in the turn.
+  onDeleteTurn?: (ids: string[]) => void;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages, pending, busy]);
+
+  const empty = messages.length === 0 && !pending;
+  // Group the flat message list into turns: each user message starts a new
+  // turn; assistant replies attach to the turn above them.
+  const turns: Message[][] = [];
+  for (const m of messages) {
+    if (m.role === "user" || turns.length === 0) turns.push([m]);
+    else turns[turns.length - 1]!.push(m);
+  }
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex items-center justify-between gap-3 border-b border-line px-6 py-3">
+        <div className="font-mono text-[9.5px] uppercase tracking-[0.12em] text-hint">
+          {agentName} · conversation
+        </div>
+        <button onClick={onClose} className="shrink-0 font-mono text-[12px] text-hint hover:text-strong">
+          ✕
+        </button>
+      </div>
+      <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto px-6 py-4">
+        {empty ? (
+          <div className="grid h-full place-items-center text-[12.5px] text-hint">
+            No messages yet — ask the agent below.
+          </div>
+        ) : (
+          turns.map((turn, i) => {
+            const ids = turn.map((m) => m.id);
+            const del = onDeleteTurn ? () => onDeleteTurn(ids) : undefined;
+            return (
+              <div key={ids[0] ?? i} className="space-y-2">
+                {turn.map((m, j) =>
+                  m.role === "user" ? (
+                    <UserTurn
+                      key={m.id}
+                      accent={accent}
+                      content={m.content}
+                      onDelete={j === 0 ? del : undefined}
+                    />
+                  ) : (
+                    <AssistantTurn
+                      key={m.id}
+                      accent={accent}
+                      content={m.content}
+                      onDelete={j === 0 ? del : undefined}
+                    />
+                  ),
+                )}
+              </div>
+            );
+          })
+        )}
+        {pending && <UserTurn accent={accent} content={pending} />}
+        {busy && (
+          <div className="flex items-center gap-2 text-[13px] text-hint">
+            <span className="h-2 w-2 animate-orrery-pulse rounded-full" style={{ background: accent }} />
+            Thinking…
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function UserTurn({
+  accent,
+  content,
+  onDelete,
+}: {
+  accent: string;
+  content: string;
+  onDelete?: () => void;
+}) {
+  return (
+    <div className="flex justify-end">
+      <div
+        className="flex max-w-[80%] items-start gap-2 rounded-2xl rounded-br-sm px-3.5 py-2 text-[13.5px] text-ink"
+        style={{ background: `${accent}1a` }}
+      >
+        <span className="min-w-0 flex-1 whitespace-pre-wrap">{content}</span>
+        {onDelete && (
+          <button
+            onClick={onDelete}
+            title="Remove this prompt and its response"
+            aria-label="Remove this prompt and its response"
+            className="mt-0.5 grid h-[25px] w-[25px] shrink-0 cursor-pointer place-items-center rounded-full border bg-transparent text-[14px] leading-none text-ink/55 hover:text-[#8a3b2e]"
+            style={{ borderColor: `${accent}80` }}
+          >
+            ✕
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AssistantTurn({
+  accent,
+  content,
+  onDelete,
+}: {
+  accent: string;
+  content: string;
+  onDelete?: () => void;
+}) {
+  return (
+    <div className="group flex flex-col gap-1">
+      <div className="flex items-center gap-2">
+        <span className="font-mono text-[9px] uppercase tracking-[0.12em]" style={{ color: accent }}>
+          Agent
+        </span>
+        {onDelete && (
+          <button
+            onClick={onDelete}
+            title="Remove this prompt and its response"
+            className="font-mono text-[11px] text-line-soft opacity-0 hover:text-[#8a3b2e] group-hover:opacity-100"
+          >
+            ✕
+          </button>
+        )}
+      </div>
+      <div className="max-w-[760px] text-[13.5px] leading-relaxed text-strong [&_a]:underline [&_h1]:mt-3 [&_h1]:font-semibold [&_h2]:mt-3 [&_h2]:font-semibold [&_li]:ml-4 [&_li]:list-disc [&_p]:my-1.5 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-paper [&_pre]:p-2">
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+      </div>
+    </div>
+  );
+}
+
 export function DetailPanel({
   node,
   accent,
@@ -239,6 +394,13 @@ export function DetailPanel({
         {node.facet && <Row label="Folder">{node.facet}</Row>}
         {node.status && <Row label="Status">{node.status}</Row>}
         {node.desc && <Row label="Detail">{node.desc}</Row>}
+        {node.path && (
+          <Row label="Path">
+            <span className="break-all font-mono text-[11px] text-muted">
+              files/{node.path}
+            </span>
+          </Row>
+        )}
         {node.path && (
           <Row label="File">
             <a
