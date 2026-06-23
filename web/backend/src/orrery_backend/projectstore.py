@@ -15,12 +15,26 @@ from __future__ import annotations
 
 import re
 import subprocess
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from email import message_from_bytes
+from email.header import decode_header, make_header
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 
 from orrery_lib import filestore
+
+
+def _clean_header(value: str | None) -> str | None:
+    """Decode RFC 2047 encoded-words and collapse header folding (\\r\\n +
+    indent) into single spaces, so addresses/subjects read cleanly."""
+    if not value:
+        return None
+    try:
+        value = str(make_header(decode_header(value)))
+    except Exception:
+        pass
+    return re.sub(r"\s+", " ", value).strip() or None
 
 # Extension → node type (mirrors the timeline design's type map).
 _TYPE_BY_EXT = {
@@ -306,8 +320,34 @@ def delete_upload(
     )
 
 
-def parse_eml(data: bytes) -> tuple[datetime | None, str | None, str | None]:
-    """Pull (sent/received date, subject, sender) from raw .eml bytes."""
+@dataclass
+class EmailMeta:
+    """Header details pulled from a .eml for cataloging."""
+
+    date: datetime | None = None
+    subject: str | None = None
+    sender: str | None = None
+    to: str | None = None
+    cc: str | None = None
+    attachments: list[str] = field(default_factory=list)
+
+    def description(self) -> str | None:
+        """A compact multi-line summary for the catalog description."""
+        lines = []
+        if self.sender:
+            lines.append(f"From: {self.sender}")
+        if self.to:
+            lines.append(f"To: {self.to}")
+        if self.cc:
+            lines.append(f"Cc: {self.cc}")
+        if self.attachments:
+            lines.append("Attachments: " + ", ".join(self.attachments))
+        return "\n".join(lines) or None
+
+
+def parse_eml(data: bytes) -> EmailMeta:
+    """Pull header details (date, subject, sender, recipients, attachment
+    filenames) from raw .eml bytes."""
     msg = message_from_bytes(data)
     when: datetime | None = None
     raw = msg.get("Date")
@@ -318,7 +358,20 @@ def parse_eml(data: bytes) -> tuple[datetime | None, str | None, str | None]:
             when = None
     if when is not None and when.tzinfo is None:
         when = when.replace(tzinfo=timezone.utc)
-    return when, msg.get("Subject"), msg.get("From")
+    attachments = [
+        name
+        for part in msg.walk()
+        if part.get_content_disposition() == "attachment"
+        and (name := _clean_header(part.get_filename()))
+    ]
+    return EmailMeta(
+        date=when,
+        subject=_clean_header(msg.get("Subject")),
+        sender=_clean_header(msg.get("From")),
+        to=_clean_header(msg.get("To")),
+        cc=_clean_header(msg.get("Cc")),
+        attachments=attachments,
+    )
 
 
 def research_log_path_at(rel_root: str) -> Path:

@@ -410,7 +410,11 @@ export function DetailPanel({
         </Row>
         {node.facet && <Row label="Folder">{node.facet}</Row>}
         {node.status && <Row label="Status">{node.status}</Row>}
-        {node.desc && <Row label="Detail">{node.desc}</Row>}
+        {node.desc && (
+          <Row label="Detail">
+            <span className="whitespace-pre-line">{node.desc}</span>
+          </Row>
+        )}
         {node.path && (
           <Row label="Path">
             <span className="break-all font-mono text-[11px] text-muted">

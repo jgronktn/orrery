@@ -456,12 +456,11 @@ def ingest_timeline_drop(
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     description: str | None = None
     if ext == "eml":
-        when, subject, sender = projectstore.parse_eml(data)
-        occurred = when or datetime.now(timezone.utc)
+        meta = projectstore.parse_eml(data)
+        occurred = meta.date or datetime.now(timezone.utc)
         node_type = "email"
-        title = (subject or filename).strip() or filename
-        if sender:
-            description = f"From {sender}"
+        title = (meta.subject or filename).strip() or filename
+        description = meta.description()
     else:
         occurred = datetime.now(timezone.utc)
         node_type = projectstore._type_for_ext(ext)

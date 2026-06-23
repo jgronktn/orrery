@@ -105,6 +105,70 @@ def backfill_facets() -> int:
         db.close()
 
 
+def reindex_emails() -> int:
+    """Backfill email cataloging for existing .eml rows: re-parse the headers
+    (From/To/Cc/attachments), re-extract the body text, refresh the catalog
+    row (type/title/description/occurred_at/extracted_text), and re-index its
+    embeddings. Idempotent; safe to run repeatedly after the .eml-aware text
+    extractor lands."""
+    db = SessionLocal()
+    try:
+        n = 0
+        for cat in list(db.scalars(select(Catalog).where(Catalog.ext == "eml"))):
+            p = filestore.FILES_ROOT / cat.path
+            if not p.is_file():
+                continue
+            data = p.read_bytes()
+            meta = projectstore.parse_eml(data)
+            text = filestore.extract_text(p)
+            now = datetime.now(timezone.utc)
+
+            cat.type = "email"
+            cat.title = ((meta.subject or p.name).strip() or p.name)[:300]
+            cat.description = meta.description()
+            if meta.date is not None:
+                cat.occurred_at = meta.date
+            cat.extracted_text = text
+            cat.text_extracted_at = now if text else None
+            db.commit()
+            db.refresh(cat)
+
+            docstore.delete_file(str(cat.id))
+            if text:
+                docstore.index_file(
+                    str(cat.id), text, path=cat.path, title=cat.title,
+                    container_kind=cat.container_kind,
+                    container_id=str(cat.container_id) if cat.container_id else None,
+                    function=cat.function, source=cat.source,
+                )
+            n += 1
+        print(f"reindexed {n} email(s)")
+        return n
+    finally:
+        db.close()
+
+
+def remove_path(rel_path: str) -> bool:
+    """Delete one cataloged file by its FILES_ROOT-relative path: git-remove the
+    bytes, drop its embeddings, delete the catalog row. Returns False if there's
+    no catalog row for it."""
+    from . import commit_path
+    from .models import User
+
+    db = SessionLocal()
+    try:
+        cat = db.scalar(select(Catalog).where(Catalog.path == rel_path))
+        if cat is None:
+            print(f"no catalog row for {rel_path}")
+            return False
+        actor = db.scalars(select(User).order_by(User.created_at)).first()
+        commit_path.remove_file(db, cat, actor=actor)
+        print(f"removed {rel_path}")
+        return True
+    finally:
+        db.close()
+
+
 if __name__ == "__main__":
     scan_store()
     backfill_facets()
