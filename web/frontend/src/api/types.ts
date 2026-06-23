@@ -870,6 +870,8 @@ export interface paths {
         /**
          * File Text
          * @description Deterministically-extracted text for preview (markdown/pdf/docx/csv).
+         *     Plain-text files are re-read from disk so the preview always reflects the
+         *     current contents; binary types fall back to the cataloged extraction.
          *     Null when the file type has no extractable text (e.g. images).
          */
         get: operations["file_text_api_files_text_get"];
@@ -1479,6 +1481,8 @@ export interface components {
             facet?: string | null;
             /** Note */
             note?: string | null;
+            /** Direction */
+            direction?: string | null;
         };
         /** TimelineNoteIn */
         TimelineNoteIn: {

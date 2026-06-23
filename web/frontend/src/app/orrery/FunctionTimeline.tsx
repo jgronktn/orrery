@@ -1,7 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { TimelineNode } from "../../api/client";
-import { fmtDate, fmtTick, niceStep, typeColor, typeLabel } from "./timelineScale";
+import {
+  daysFromNow,
+  fmtDate,
+  fmtTick,
+  niceStep,
+  typeColor,
+  typeLabel,
+} from "./timelineScale";
+import { TypeGlyph } from "./timelineSurface";
 
 // Horizontal activity timeline: a time axis at the vertical center with
 // zoom-dependent tick marks. Zoom-in is capped so one day fills the width;
@@ -24,9 +32,10 @@ interface Dims {
   titlePx: number;
   metaPx: number;
   dot: number;
+  strip: number; // width of the colored type-icon strip on the card's left
 }
-const FULL: Dims = { cardW: 156, cardH: 40, rowH: 50, axisGap: 16, titlePx: 12, metaPx: 9.5, dot: 5 };
-const MINI: Dims = { cardW: 104, cardH: 26, rowH: 30, axisGap: 9, titlePx: 10.5, metaPx: 8, dot: 4 };
+const FULL: Dims = { cardW: 156, cardH: 33, rowH: 50, axisGap: 16, titlePx: 12, metaPx: 9.5, dot: 5, strip: 28 };
+const MINI: Dims = { cardW: 104, cardH: 26, rowH: 30, axisGap: 9, titlePx: 10.5, metaPx: 8, dot: 4, strip: 22 };
 
 interface Placed {
   node: TimelineNode;
@@ -44,11 +53,19 @@ function layoutLanes(
   const rowsAbove: number[] = [];
   const rowsBelow: number[] = [];
   const out: Placed[] = [];
-  sorted.forEach((node, i) => {
+  let alt = 0; // alternation counter for non-email items only
+  sorted.forEach((node) => {
     const x = xAt(node.time);
     const left = x - cardW / 2;
     const right = x + cardW / 2;
-    const side: "above" | "below" = i % 2 === 0 ? "above" : "below";
+    // Emails are placed by direction (outgoing above, incoming below); every
+    // other item keeps the alternating above/below packing.
+    let side: "above" | "below";
+    if (node.type === "email" && node.direction) {
+      side = node.direction === "out" ? "above" : "below";
+    } else {
+      side = alt++ % 2 === 0 ? "above" : "below";
+    }
     const rows = side === "above" ? rowsAbove : rowsBelow;
     let row = 0;
     while (row < rows.length && (rows[row] ?? -Infinity) > left - 8) row++;
@@ -86,6 +103,18 @@ export function FunctionTimeline({
   const d = compact ? MINI : FULL;
   const ref = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 1000, h: compact ? 170 : 440 });
+  // Instant hover tooltip showing days-from-now, positioned at the cursor.
+  const [hoverTip, setHoverTip] = useState<{ x: number; y: number; text: string } | null>(null);
+  const showTip = (e: React.MouseEvent, n: TimelineNode) => {
+    const r = ref.current?.getBoundingClientRect();
+    if (!r) return;
+    setHoverTip({
+      x: e.clientX - r.left,
+      y: e.clientY - r.top,
+      text: `${n.name} · ${daysFromNow(n.time)}`,
+    });
+  };
+  const hideTip = () => setHoverTip(null);
   const [ppm, setPpm] = useState<number | null>(null);
   const [center, setCenter] = useState<number>(Date.now());
   const [over, setOver] = useState(false);
@@ -234,6 +263,7 @@ export function FunctionTimeline({
       className="relative h-full w-full cursor-grab overflow-hidden bg-[radial-gradient(circle_at_50%_50%,#F5F7EE_0%,#EEF0E6_100%)] active:cursor-grabbing"
       onWheel={onWheel}
       onMouseDown={onMouseDown}
+      onMouseLeave={hideTip}
       onDragOver={
         onDropFile || onDropKind
           ? (e) => {
@@ -337,13 +367,14 @@ export function FunctionTimeline({
                 strokeWidth={sel ? 1.5 : 1.5}
                 style={{ cursor: onSelect ? "pointer" : "default" }}
                 onMouseDown={(e) => e.stopPropagation()}
+                onMouseEnter={(e) => showTip(e, n)}
+                onMouseMove={(e) => showTip(e, n)}
+                onMouseLeave={hideTip}
                 onClick={(e) => {
                   e.stopPropagation();
                   onSelect?.(n);
                 }}
-              >
-                <title>{n.name}</title>
-              </circle>
+              />
             );
           })}
       </svg>
@@ -356,33 +387,53 @@ export function FunctionTimeline({
             ? axisY - d.axisGap - p.row * d.rowH - d.cardH
             : axisY + d.axisGap + p.row * d.rowH;
         const selected = p.node.id === selectedId;
+        // Emails show "To" (outgoing) / "From" (incoming) instead of the type
+        // label; everything else keeps its type label.
+        const label =
+          p.node.type === "email" && p.node.direction
+            ? p.node.direction === "out"
+              ? "To"
+              : "From"
+            : typeLabel(p.node);
         return (
           <button
             key={p.node.id}
             onMouseDown={(e) => e.stopPropagation()}
+            onMouseEnter={(e) => showTip(e, p.node)}
+            onMouseMove={(e) => showTip(e, p.node)}
+            onMouseLeave={hideTip}
             onClick={(e) => {
               e.stopPropagation();
               onSelect?.(p.node);
             }}
-            className="absolute flex flex-col justify-center gap-0.5 rounded-lg border bg-white px-2 text-left"
+            className="absolute flex items-stretch overflow-hidden rounded-[4px] border text-left"
             style={{
               left: p.x - d.cardW / 2,
               top,
               width: d.cardW,
               height: d.cardH,
               borderColor: selected ? color : "#e0e3d4",
-              borderLeft: `3px solid ${color}`,
               boxShadow: selected
                 ? `0 0 0 2px ${color}66, 0 6px 16px -8px ${color}88`
                 : "0 2px 8px -4px rgba(20,18,12,.28)",
               cursor: onSelect ? "pointer" : "default",
             }}
           >
-            <span className="truncate font-medium text-strong" style={{ fontSize: d.titlePx }} title={p.node.name}>
-              {p.node.name}
+            {/* colored type strip: rounded on the left (clipped to the card),
+                square vertical edge on the right; near-white type icon */}
+            <span
+              className="flex shrink-0 items-center justify-center"
+              style={{ width: d.strip, background: color, color: "#eef1e7" }}
+            >
+              <TypeGlyph type={p.node.type} size={compact ? 13 : 16} />
             </span>
-            <span className="truncate font-mono uppercase tracking-wide" style={{ fontSize: d.metaPx, color }}>
-              {typeLabel(p.node)}
+            <span className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 bg-white px-2">
+              <span className="truncate font-medium text-strong" style={{ fontSize: d.titlePx }} title={p.node.name}>
+                {p.node.name}
+              </span>
+              <span className="truncate font-mono uppercase tracking-wide" style={{ fontSize: d.metaPx, color }}>
+                {label}
+              </span>
             </span>
           </button>
         );
@@ -397,6 +448,15 @@ export function FunctionTimeline({
           {dl.label}
         </div>
       ))}
+
+      {hoverTip && (
+        <div
+          className="pointer-events-none absolute z-20 whitespace-nowrap rounded-md border border-line-soft bg-paper px-2 py-1 text-[11px] font-medium text-strong shadow-[0_4px_14px_-6px_rgba(20,18,12,.5)]"
+          style={{ left: hoverTip.x, top: hoverTip.y, transform: "translate(12px, -130%)" }}
+        >
+          {hoverTip.text}
+        </div>
+      )}
 
       {over && (onDropFile || onDropKind) && (
         <div

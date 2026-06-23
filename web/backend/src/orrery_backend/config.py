@@ -41,7 +41,19 @@ class Settings(BaseSettings):
     company_name: str = "Orrery"
     company_tagline: str = "Your company, in orbit."
 
+    # Our email domain(s), comma-separated. An email whose From is on one of
+    # these is "outgoing" (sent by us); otherwise "incoming".
+    company_email_domains: str = "propertyprotectioninnovations.com"
+
     env: str = "dev"
+
+    @property
+    def company_domains(self) -> set[str]:
+        return {
+            d.strip().lower()
+            for d in self.company_email_domains.split(",")
+            if d.strip()
+        }
 
 
 settings = Settings()

@@ -3,7 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { api, type Message, type TimelineNode } from "../../api/client";
-import { fmtClock, fmtDateY, typeLabel } from "./timelineScale";
+import { daysFromNow, fmtClock, fmtDateY, typeLabel } from "./timelineScale";
 
 // Shared pieces of the activity-timeline surface, used by both the Function
 // page and the Project page: the add-item composer (kind chips), the agent
@@ -151,6 +151,77 @@ export function KindGlyph({ value }: { value: string }) {
       <path d="M5.2 8.2l1.8 1.8 3.6-4" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
+}
+
+// A small icon for a timeline node's `type` (doc/email/image/task/…), drawn at
+// the given pixel size with `currentColor` so the caller picks the tint.
+export function TypeGlyph({ type, size = 16 }: { type: string; size?: number }) {
+  const props = {
+    width: size,
+    height: size,
+    viewBox: "0 0 16 16",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.4,
+    strokeLinejoin: "round" as const,
+    strokeLinecap: "round" as const,
+    "aria-hidden": true,
+  };
+  switch (type) {
+    case "task":
+      return (
+        <svg {...props}>
+          <rect x="2.5" y="2.5" width="11" height="11" rx="2.5" />
+          <path d="M5.2 8.2l1.8 1.8 3.6-4" />
+        </svg>
+      );
+    case "milestone":
+      return (
+        <svg {...props}>
+          <path d="M3.5 1.5v13" />
+          <path d="M3.5 2.5h8l-1.8 2.6 1.8 2.6h-8z" />
+        </svg>
+      );
+    case "reminder":
+      return (
+        <svg {...props}>
+          <path d="M4 7a4 4 0 018 0c0 3 1 4 1.5 4.5h-11C3 11 4 10 4 7z" />
+          <path d="M6.5 13a1.5 1.5 0 003 0" />
+        </svg>
+      );
+    case "note":
+      return (
+        <svg {...props}>
+          <path d="M3.5 2h6l3 3v9h-9z" />
+          <path d="M9.5 2v3h3" />
+          <path d="M5.5 8.5h5M5.5 11h3" />
+        </svg>
+      );
+    case "email":
+      return (
+        <svg {...props}>
+          <rect x="2" y="3.5" width="12" height="9" rx="1.5" />
+          <path d="M2.5 4.5l5.5 4 5.5-4" />
+        </svg>
+      );
+    case "image":
+      return (
+        <svg {...props}>
+          <rect x="2" y="3" width="12" height="10" rx="1.5" />
+          <circle cx="5.5" cy="6.5" r="1.1" />
+          <path d="M3 12l3.5-3.5 2 2 2.2-2.2 3.3 3.3" />
+        </svg>
+      );
+    default:
+      // doc / code / data / style / markup / other → a generic page.
+      return (
+        <svg {...props}>
+          <path d="M4 2h5l3 3v9H4z" />
+          <path d="M9 2v3h3" />
+          <path d="M6 8.5h4M6 11h4" />
+        </svg>
+      );
+  }
 }
 
 export function AskAnswer({
@@ -455,6 +526,9 @@ export function DetailPanel({
               {fmtDateY(node.time)} · {fmtClock(node.time)} UTC
             </>
           )}
+        </Row>
+        <Row label="From now">
+          <span style={{ color: accent }}>{daysFromNow(node.time)}</span>
         </Row>
         {node.facet && <Row label="Folder">{node.facet}</Row>}
         {node.status && <Row label="Status">{node.status}</Row>}

@@ -16,7 +16,7 @@ import { FunctionTimeline } from "./FunctionTimeline";
 import { ApprovalsPanel, AskBar } from "./RightRail";
 import { Shell } from "./Shell";
 import { accentOf } from "./theme";
-import { isActivity } from "./timelineScale";
+import { isActivity, nodeStorePath } from "./timelineScale";
 import {
   CanvasAccordion,
   Composer,
@@ -344,7 +344,9 @@ export default function FunctionStream() {
                 folders={folders}
                 reloadToken={reloadToken}
                 onOpenFile={setPreview}
-                activePath={preview?.path ?? null}
+                // Highlight in the tree: the previewed file, or — when a
+                // file/email timeline item is selected — that item's file.
+                activePath={preview?.path ?? nodeStorePath(current)}
                 onUploaded={refreshFiles}
                 onRename={onFileRename}
                 onMove={onFileMove}

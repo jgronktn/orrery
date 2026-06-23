@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session as DbSession
 from orrery_lib import docstore, filestore
 
 from . import commit_path, functions, projectstore
+from .config import settings
 from .auth import current_user
 from .db import get_db
 from .models import (
@@ -229,6 +230,25 @@ def update_project(
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 
 
+_FROM_RE = re.compile(r"^From:\s*(.+)$", re.IGNORECASE | re.MULTILINE)
+_ADDR_RE = re.compile(r"[\w.+-]+@([\w.-]+)")
+
+
+def _email_direction(description: str | None) -> str:
+    """'out' if the email's From is on one of our company domains, else 'in'.
+    Reads the From line of the cataloged description (a format we control via
+    EmailMeta.description()); defaults to 'in' when it can't be determined."""
+    if not description:
+        return "in"
+    line = _FROM_RE.search(description)
+    if not line:
+        return "in"
+    addr = _ADDR_RE.search(line.group(1))
+    if not addr:
+        return "in"
+    return "out" if addr.group(1).lower() in settings.company_domains else "in"
+
+
 def _doc_node(cat: Catalog) -> dict:
     """Render a cataloged timeline file as a timeline node, dated by occurred_at."""
     when = cat.occurred_at or cat.created_at
@@ -247,6 +267,9 @@ def _doc_node(cat: Catalog) -> dict:
         "status": None,
         "facet": cat.sub_function,
         "note": cat.note,
+        # Email direction (in/out) so the UI can place + label it; None for
+        # non-email nodes.
+        "direction": _email_direction(cat.description) if cat.type == "email" else None,
     }
 
 

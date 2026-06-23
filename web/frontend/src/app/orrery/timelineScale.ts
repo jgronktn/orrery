@@ -106,3 +106,26 @@ export function typeLabel(n: TimelineNode): string {
 export function isActivity(n: TimelineNode): boolean {
   return n.id.startsWith("doc:") || n.id.startsWith("task:");
 }
+
+/** The FILES_ROOT-relative store path for a file/email timeline node — for
+ * matching the file tree's `store_path`. `file:` nodes carry it in their id
+ * (their `path` is container-relative); `doc:` nodes carry it in `path`.
+ * Returns null for non-file nodes (tasks/reminders/etc.). */
+export function nodeStorePath(n: TimelineNode | null | undefined): string | null {
+  if (!n) return null;
+  if (n.id.startsWith("file:")) return n.id.slice(5);
+  if (n.id.startsWith("doc:")) return n.path ?? null;
+  return null;
+}
+
+/** Human "days from now" for a timeline item, in UTC calendar days (matching
+ * the timeline's UTC rendering): "today", "tomorrow", "yesterday", "in N days",
+ * or "N days ago". */
+export function daysFromNow(timeMs: number): string {
+  const D = 86_400_000;
+  const diff = Math.floor(timeMs / D) - Math.floor(Date.now() / D);
+  if (diff === 0) return "today";
+  if (diff === 1) return "tomorrow";
+  if (diff === -1) return "yesterday";
+  return diff > 0 ? `in ${diff} days` : `${-diff} days ago`;
+}

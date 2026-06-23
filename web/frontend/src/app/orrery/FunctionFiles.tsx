@@ -216,6 +216,17 @@ function TreeNode({
 }) {
   const isFolder = node.children != null;
   const [open, setOpen] = useState(depth < 1);
+  // Auto-expand to reveal the active (selected/previewed) file: if it lives
+  // under this folder, open it. Doesn't fight a later manual collapse — it
+  // only re-opens when the active path changes to something inside.
+  const containsActive =
+    isFolder &&
+    !!node.store_path &&
+    !!activePath &&
+    activePath.startsWith(node.store_path + "/");
+  useEffect(() => {
+    if (containsActive) setOpen(true);
+  }, [containsActive]);
   const [over, setOver] = useState(false);
   const [addingSub, setAddingSub] = useState(false);
   const [subDraft, setSubDraft] = useState("");

@@ -233,6 +233,7 @@ class TimelineNode(BaseModel):
     status: str | None = None
     facet: str | None = None
     note: str | None = None
+    direction: str | None = None  # email: "out" (sent) | "in" (received)
 
 
 class TimelineNoteIn(BaseModel):
