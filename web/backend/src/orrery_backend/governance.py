@@ -23,6 +23,8 @@ _ORDER = {"low": 0, "medium": 1, "high": 2}
 _RISK_FLOOR = {
     # Downloads from an arbitrary URL + writes to Drive — never "low".
     "save_spec": "medium",
+    # Creating a new corporate draft document — a bounded write; queue it.
+    "save_draft": "medium",
 }
 
 

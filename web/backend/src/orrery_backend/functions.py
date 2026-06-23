@@ -42,9 +42,10 @@ class FunctionDef:
 # permission boundary, it graduates to its own function_stream. (Solo founder
 # today: nothing graduates.)
 FUNCTIONS: dict[str, FunctionDef] = {
-    # Corporate — no agent yet; facets from its real on-disk subfolders.
+    # Corporate — home of the executive-assistant agent (the cross-function
+    # "superagent"). Facets from its real on-disk subfolders.
     "corp": FunctionDef(
-        "corp", "Corporate", None, "corporate",
+        "corp", "Corporate", "corporate", "corporate",
         facets=("ip", "equity", "financial", "governance", "contracts"),
     ),
     # key='engr' (renamed from 'engineering'); folder + agent stay full-word.

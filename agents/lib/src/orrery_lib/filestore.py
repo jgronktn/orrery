@@ -425,3 +425,17 @@ def build_reader(folders: list[str]) -> FileStoreReader:
             roots.append(FILES_ROOT / cleaned)
     roots.append(ENGINEERING_ROOT)
     return FileStoreReader(roots)
+
+
+def build_global_reader() -> FileStoreReader:
+    """Reader over the ENTIRE store — every top-level folder (all function
+    folders + projects/ + shared/). For the cross-function executive-assistant
+    agent, which reads across everything. `list_dir("")` shows the functions and
+    projects/ as the top level; VCS noise is skipped."""
+    roots = sorted(
+        d
+        for d in FILES_ROOT.iterdir()
+        if d.is_dir() and d.name not in _DIR_SKIP
+    )
+    # Fall back to the store root if it's somehow empty, so the reader is valid.
+    return FileStoreReader(roots or [FILES_ROOT])

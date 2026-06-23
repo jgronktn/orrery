@@ -164,12 +164,18 @@ export function AskBar({
   suggestion,
   onAsk,
   busy,
+  onReopen,
+  reopenCount,
 }: {
   agentName: string;
   scopeLabel: string;
   suggestion: string;
   onAsk: (prompt: string) => void;
   busy?: boolean;
+  // When the conversation is closed but has history, the caller passes a
+  // reopen handler + message count to surface a "view conversation" button.
+  onReopen?: () => void;
+  reopenCount?: number;
 }) {
   const [text, setText] = useState("");
   const submit = () => {
@@ -190,6 +196,17 @@ export function AskBar({
           {scopeLabel}
         </span>
       </div>
+      {onReopen && reopenCount ? (
+        <button
+          onClick={onReopen}
+          className="mb-2 flex w-full items-center gap-2 rounded-lg border border-line-soft bg-paper-alt px-3 py-2 text-left text-[12px] text-strong-alt hover:bg-rowhover"
+        >
+          <span aria-hidden>↩</span>
+          <span className="truncate">
+            View conversation · {reopenCount} message{reopenCount === 1 ? "" : "s"}
+          </span>
+        </button>
+      ) : null}
       <button
         onClick={() => onAsk(suggestion)}
         disabled={busy}

@@ -25,6 +25,7 @@ class Settings(BaseSettings):
 
     # Agent HTTP services (the backend is the only caller).
     engineering_agent_url: str = "http://engineering:8001"
+    corporate_agent_url: str = "http://corporate:8002"
     # URL agents use to call back into /internal/agent/* (in-network name).
     backend_internal_url: str = "http://backend:8000"
 

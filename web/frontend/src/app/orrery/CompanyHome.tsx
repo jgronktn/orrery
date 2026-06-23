@@ -28,7 +28,9 @@ import { accentOf } from "./theme";
 import { isActivity } from "./timelineScale";
 import { Conversation } from "./timelineSurface";
 
-const ENGINEERING_AGENT = "engineering";
+// The company core (no function selected) routes to the executive assistant —
+// the cross-function agent. A selected function routes to its own agent.
+const COMPANY_AGENT = "corporate";
 
 // Attached integrations docked under the map. The backend has no integration
 // layer this phase, so these are a static, dimmed affordance (not wired).
@@ -249,13 +251,13 @@ export default function CompanyHome() {
     }
   };
 
-  // Ask config: company → global (engineering, the EA placeholder); a function
-  // routes to its agent (only engineering is live). Agentless functions show
-  // a disabled bar honestly reflecting `agent: null`.
-  const askAgent = selFn ? selFn.agent : ENGINEERING_AGENT;
+  // Ask config: company core → the executive assistant (cross-function); a
+  // function routes to its own agent. Agentless functions show a disabled bar
+  // honestly reflecting `agent: null`.
+  const askAgent = selFn ? selFn.agent : COMPANY_AGENT;
   const askName = selFn
     ? selFn.name
-    : `${company} · Company agent`;
+    : `${company} · Executive Assistant`;
   const askScope = selFn ? `${selFn.name} agent` : "Company";
   const suggestion = selFn
     ? `What's moving in ${selFn.name} right now?`
@@ -356,6 +358,12 @@ export default function CompanyHome() {
           suggestion={suggestion}
           onAsk={(p) => void onAsk(p)}
           busy={busy}
+          onReopen={
+            !chatOpen && messages.length && !preview
+              ? () => setChatOpen(true)
+              : undefined
+          }
+          reopenCount={messages.length}
         />
       ) : (
         <div className="border-t border-line bg-paper px-4 py-4 text-[12px] text-hint">

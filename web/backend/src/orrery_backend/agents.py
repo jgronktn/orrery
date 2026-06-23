@@ -55,6 +55,13 @@ REGISTRY: dict[str, AgentDescriptor] = {
         description="Drive document Q&A, parts/vendor research, and template drafting.",
         url=settings.engineering_agent_url,
     ),
+    "corporate": AgentDescriptor(
+        id="corporate",
+        name="Executive Assistant",
+        description="Cross-function reach: reads across every function + project, "
+        "synthesizes, and drafts corporate documents.",
+        url=settings.corporate_agent_url,
+    ),
 }
 
 router = APIRouter(prefix="/api/agents", tags=["agents"])

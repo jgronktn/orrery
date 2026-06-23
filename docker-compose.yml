@@ -34,6 +34,27 @@ x-engineering-volumes: &engineering-volumes
   - /var/lib/orrery/files:/var/lib/orrery/files:rw
   - ./logs:/app/logs
 
+# ── Shared config for the executive-assistant (corporate) agent image ──
+x-corporate-build: &corporate-build
+  build:
+    context: ./agents
+    dockerfile: corporate/Dockerfile
+
+x-corporate-env: &corporate-env
+  ORRERY_GATEWAY_URL: "http://gateway:4000/v1"
+  ORRERY_MODEL: "claude-sonnet"
+  ORRERY_QDRANT_URL: "http://qdrant:6333"
+  ORRERY_EMBED_MODEL: "BAAI/bge-small-en-v1.5"
+  # The document store (filesystem). The EA reads across all of it.
+  ORRERY_FILES_ROOT: "/var/lib/orrery/files"
+
+x-corporate-volumes: &corporate-volumes
+  - ./agents/corporate/src:/app/corporate/src:ro
+  - ./config:/app/config:ro
+  # The document store, read-write (the EA writes approved drafts here).
+  - /var/lib/orrery/files:/var/lib/orrery/files:rw
+  - ./logs:/app/logs
+
 services:
   gateway:
     # LiteLLM is a small Python/FastAPI proxy that speaks the OpenAI
@@ -136,6 +157,44 @@ services:
       start_period: 30s
 
   # ─────────────────────────────────────────────────────────────────────
+  # Executive-assistant (corporate) agent as an HTTP service. The backend
+  # calls it at http://corporate:8002/run. Stateless; reads across the whole
+  # document store.
+  # ─────────────────────────────────────────────────────────────────────
+  corporate:
+    <<: *corporate-build
+    image: orrery-corporate:latest
+    container_name: orrery-corporate
+    user: *run-as-host-user
+    env_file:
+      - .env
+    environment: *corporate-env
+    volumes: *corporate-volumes
+    entrypoint: ["uvicorn"]
+    command:
+      - "orrery_corporate.server:app"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8002"
+      - "--reload"
+      - "--reload-dir"
+      - "/app/corporate/src"
+    ports:
+      - "8002:8002"  # exposed for debugging; the backend uses the in-network name
+    depends_on:
+      gateway:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; urllib.request.urlopen('http://localhost:8002/health', timeout=3).read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # ─────────────────────────────────────────────────────────────────────
   # The same image as a CLI. Not started by `compose up` (profile: cli);
   # run via `make chat` / `make ask Q="..."`.
   # ─────────────────────────────────────────────────────────────────────
@@ -196,6 +255,7 @@ services:
     environment:
       ORRERY_DATABASE_URL: "postgresql+psycopg://orrery:orrery@postgres:5432/orrery"
       ORRERY_ENGINEERING_AGENT_URL: "http://engineering:8001"
+      ORRERY_CORPORATE_AGENT_URL: "http://corporate:8002"
       ORRERY_SESSION_SECRET: "${ORRERY_SESSION_SECRET:-dev-insecure-change-me}"
       ORRERY_FILES_ROOT: "/var/lib/orrery/files"
       ORRERY_QDRANT_URL: "http://qdrant:6333"
@@ -211,6 +271,8 @@ services:
       postgres:
         condition: service_healthy
       engineering:
+        condition: service_healthy
+      corporate:
         condition: service_healthy
       qdrant:
         condition: service_healthy
