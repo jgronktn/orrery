@@ -126,6 +126,7 @@ services:
     <<: *engineering-build
     image: orrery-engineering:latest
     container_name: orrery-engineering
+    restart: unless-stopped
     user: *run-as-host-user
     env_file:
       - .env
@@ -165,6 +166,7 @@ services:
     <<: *corporate-build
     image: orrery-corporate:latest
     container_name: orrery-corporate
+    restart: unless-stopped
     user: *run-as-host-user
     env_file:
       - .env
