@@ -24,6 +24,9 @@ x-engineering-env: &engineering-env
   ORRERY_ENG_DRAFTS_FOLDER_ID: "${ORRERY_ENG_DRAFTS_FOLDER_ID:-}"
   # The document store (filesystem). Single source of truth for paths.
   ORRERY_FILES_ROOT: "/var/lib/orrery/files"
+  # Observability: don't trace healthcheck requests (the Docker healthcheck
+  # hits /health every 30s). OTel/Logfire FastAPI instrumentation reads this.
+  OTEL_PYTHON_EXCLUDED_URLS: "health"
 
 x-engineering-volumes: &engineering-volumes
   - ./agents/engineering/src:/app/engineering/src:ro
@@ -47,6 +50,8 @@ x-corporate-env: &corporate-env
   ORRERY_EMBED_MODEL: "BAAI/bge-small-en-v1.5"
   # The document store (filesystem). The EA reads across all of it.
   ORRERY_FILES_ROOT: "/var/lib/orrery/files"
+  # Don't trace healthcheck requests (see engineering env note).
+  OTEL_PYTHON_EXCLUDED_URLS: "health"
 
 x-corporate-volumes: &corporate-volumes
   - ./agents/corporate/src:/app/corporate/src:ro
@@ -262,6 +267,9 @@ services:
       ORRERY_FILES_ROOT: "/var/lib/orrery/files"
       ORRERY_QDRANT_URL: "http://qdrant:6333"
       ORRERY_ENV: "dev"
+      # Don't trace healthcheck requests (applies when backend FastAPI spans
+      # are re-enabled; harmless now).
+      OTEL_PYTHON_EXCLUDED_URLS: "health"
       HOME: "/tmp"
     ports:
       - "8000:8000"

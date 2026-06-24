@@ -250,6 +250,10 @@ class ProposalRecord(Base):
         ForeignKey("projects.id", ondelete="CASCADE"), nullable=True
     )
     agent_id: Mapped[str] = mapped_column(String(50))
+    # Correlation id of the agent run that produced this proposal — joins the
+    # DB approval outcome to the Logfire run span (tokens/cost). Nullable: rows
+    # predate observability, and low-risk auto-exec still carries it.
+    request_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     kind: Mapped[str] = mapped_column(String(50))
     summary: Mapped[str] = mapped_column(Text)
     risk: Mapped[str] = mapped_column(String(10))  # low | medium | high

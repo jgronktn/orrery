@@ -62,6 +62,10 @@ class AgentRequest(BaseModel):
     conversation_history: list[ConversationTurn] = Field(default_factory=list)
     project_context: dict | None = None
     callback: AgentCallback | None = None
+    # Correlation id minted by the backend per run, tagged on the agent-run
+    # span and stored on any proposal the run produces — links run → proposal →
+    # approval for token/cost-vs-outcome analysis.
+    request_id: str | None = None
 
 
 class AgentResponse(BaseModel):

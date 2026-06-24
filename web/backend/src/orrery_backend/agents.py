@@ -144,6 +144,9 @@ async def send_message(
     db: DbSession = Depends(get_db),
 ) -> Message:
     agent = _require_agent(agent_id)
+    # Correlation id for this run: tagged on the agent-run span and stored on
+    # any proposal it produces, so spend can be sliced by governance outcome.
+    request_id = str(uuid.uuid4())
 
     project_context: dict | None = None
     callback: AgentCallback | None = None
@@ -186,6 +189,7 @@ async def send_message(
         conversation_history=history,
         project_context=project_context,
         callback=callback,
+        request_id=request_id,
     )
     try:
         async with httpx.AsyncClient(timeout=300.0) as client:
@@ -213,6 +217,7 @@ async def send_message(
             risk=final,
             payload=p.payload,
             status="pending",
+            request_id=request_id,
         )
         db.add(record)
         db.flush()

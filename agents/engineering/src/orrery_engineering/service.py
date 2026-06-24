@@ -28,6 +28,8 @@ from orrery_lib.schema import (
     Risk,
 )
 
+import logfire
+
 from orrery_lib.filestore import build_reader
 from orrery_lib.pm import BackendClient
 
@@ -61,23 +63,34 @@ async def run_once(req: AgentRequest) -> AgentResponse:
     agent = build_agent()
     history = _to_message_history(req.conversation_history)
 
-    result = await agent.run(
-        req.query, deps=deps, message_history=history or None
-    )
-    text = _join_text(result.new_messages()) or result.output
-
-    proposals = [
-        Proposal(
-            # A web-found datasheet the agent wants saved into drafts/.
-            # Medium risk: it's a bounded write + outbound fetch, so it
-            # queues for human approval (never auto-executes).
-            kind="save_spec",
-            summary=f"Save '{s.get('filename') or s['url']}' to engineering/drafts/",
-            risk=Risk.MEDIUM,
-            payload={"url": s["url"], "filename": s.get("filename")},
+    # One span per agent run, carrying Orrery domain attributes; the PydanticAI
+    # spans (loop, tokens, tool calls) nest underneath it.
+    with logfire.span(
+        "agent_run",
+        agent_name="engineering",
+        container=folder,
+        request_id=req.request_id,
+    ) as span:
+        result = await agent.run(
+            req.query, deps=deps, message_history=history or None
         )
-        for s in deps.pending_saves
-    ]
+        text = _join_text(result.new_messages()) or result.output
+
+        proposals = [
+            Proposal(
+                # A web-found datasheet the agent wants saved into drafts/.
+                # Medium risk: it's a bounded write + outbound fetch, so it
+                # queues for human approval (never auto-executes).
+                kind="save_spec",
+                summary=f"Save '{s.get('filename') or s['url']}' to engineering/drafts/",
+                risk=Risk.MEDIUM,
+                payload={"url": s["url"], "filename": s.get("filename")},
+            )
+            for s in deps.pending_saves
+        ]
+        span.set_attribute("produced_proposal", bool(proposals))
+        if proposals:
+            span.set_attribute("proposal_risk", proposals[0].risk.value)
 
     return AgentResponse(text=text, proposals=proposals)
 

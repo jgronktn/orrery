@@ -7,10 +7,15 @@ name = "orrery-lib"
 version = "0.1.0"
 description = "Shared utilities for Orrery agents — schema, gateway client, KB wrapper, Drive helpers."
 requires-python = ">=3.12"
-# Core deps are light: just what the shared schema/errors need, so the
-# web backend can import orrery_lib.schema without the agent's heavy deps.
+# Core deps are light: the shared schema/errors + Logfire observability
+# (OTel-based; instrumentation lives in orrery_lib.observability and is used by
+# both the backend and the agents). The web backend can still import
+# orrery_lib.schema without the agent's heavy deps.
 dependencies = [
     "pydantic>=2,<3",
+    # Logfire + the OTel instrumentation extras used across services
+    # (fastapi/httpx everywhere; sqlalchemy for the backend).
+    "logfire[fastapi,httpx,sqlalchemy]>=3,<4",
 ]
 
 [project.optional-dependencies]

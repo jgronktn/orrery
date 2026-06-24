@@ -18,6 +18,8 @@ from pydantic_ai.messages import (
     UserPromptPart,
 )
 
+import logfire
+
 from orrery_lib import filestore
 from orrery_lib.filestore import build_global_reader
 from orrery_lib.pm import BackendClient
@@ -58,25 +60,36 @@ async def run_once(req: AgentRequest) -> AgentResponse:
     agent = build_agent()
     history = _to_message_history(req.conversation_history)
 
-    result = await agent.run(req.query, deps=deps, message_history=history or None)
-    text = _join_text(result.new_messages()) or result.output
+    # One span per agent run, carrying Orrery domain attributes; the PydanticAI
+    # spans (loop, tokens, tool calls) nest underneath it.
+    with logfire.span(
+        "agent_run",
+        agent_name="corporate",
+        container=(req.project_context or {}).get("folder"),
+        request_id=req.request_id,
+    ) as span:
+        result = await agent.run(req.query, deps=deps, message_history=history or None)
+        text = _join_text(result.new_messages()) or result.output
 
-    proposals = [
-        Proposal(
-            # A corporate document the EA drafted and wants saved into
-            # corporate/drafts/. Medium risk: a bounded create-only write, so it
-            # queues for human approval (never auto-executes).
-            kind="save_draft",
-            summary=f"Save draft '{d['filename']}' to {DRAFTS_DIR}/",
-            risk=Risk.MEDIUM,
-            payload={
-                "filename": d["filename"],
-                "content": d["content"],
-                "title": d.get("title"),
-            },
-        )
-        for d in deps.pending_drafts
-    ]
+        proposals = [
+            Proposal(
+                # A corporate document the EA drafted and wants saved into
+                # corporate/drafts/. Medium risk: a bounded create-only write, so
+                # it queues for human approval (never auto-executes).
+                kind="save_draft",
+                summary=f"Save draft '{d['filename']}' to {DRAFTS_DIR}/",
+                risk=Risk.MEDIUM,
+                payload={
+                    "filename": d["filename"],
+                    "content": d["content"],
+                    "title": d.get("title"),
+                },
+            )
+            for d in deps.pending_drafts
+        ]
+        span.set_attribute("produced_proposal", bool(proposals))
+        if proposals:
+            span.set_attribute("proposal_risk", proposals[0].risk.value)
 
     return AgentResponse(text=text, proposals=proposals)
 
