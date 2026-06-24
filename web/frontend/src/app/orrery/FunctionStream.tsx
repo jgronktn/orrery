@@ -81,7 +81,7 @@ export default function FunctionStream() {
   const streamId = fn?.stream_id;
 
   // Load this function-stream's persisted conversation once the agent + stream
-  // are known; expand the Conversation pane if there's any history.
+  // are known. Projects stays the default open pane; asking switches to it.
   useEffect(() => {
     setPane("projects");
     setMessages([]);
@@ -90,7 +90,6 @@ export default function FunctionStream() {
       .getMessages(fn.agent, fn.stream_id)
       .then((ms) => {
         setMessages(ms);
-        if (ms.length) setPane("conversation");
       })
       .catch(() => undefined);
   }, [fn?.agent, fn?.stream_id]);
@@ -370,11 +369,6 @@ export default function FunctionStream() {
                   openId={pane}
                   onOpen={(id) => setPane(id as "projects" | "conversation")}
                   sections={[
-                    {
-                      id: "projects",
-                      title: "Projects",
-                      body: <ProjectsList funcKey={key} accent={accent} embedded />,
-                    },
                     ...(fn?.agent
                       ? [
                           {
@@ -395,6 +389,11 @@ export default function FunctionStream() {
                           },
                         ]
                       : []),
+                    {
+                      id: "projects",
+                      title: "Projects",
+                      body: <ProjectsList funcKey={key} accent={accent} embedded />,
+                    },
                   ]}
                 />
               )}

@@ -564,10 +564,10 @@ export function DetailPanel({
           </div>
           <textarea
             value={note}
-            rows={3}
+            rows={9}
             onChange={(e) => setNote(e.target.value)}
             placeholder="Add a note or URL…"
-            className="w-full resize-none rounded-lg border border-line-soft bg-white px-2 py-1.5 text-[12.5px] text-ink outline-none placeholder:text-hint"
+            className="min-h-[180px] w-full resize-y rounded-lg border border-line-soft bg-white px-2 py-1.5 text-[12.5px] text-ink outline-none placeholder:text-hint"
           />
           <button
             onClick={() => onSetNote(note.trim() || null)}
