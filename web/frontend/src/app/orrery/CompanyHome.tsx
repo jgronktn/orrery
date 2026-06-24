@@ -22,7 +22,7 @@ import { FileViewer, type PreviewFile } from "./FileViewer";
 import { FunctionFiles } from "./FunctionFiles";
 import { LoginVault } from "./LoginVault";
 import { OrreryMap, type Selection } from "./OrreryMap";
-import { AskBar, ApprovalsPanel, TimelinePanel } from "./RightRail";
+import { AskBar, RailAccordion, TimelinePanel } from "./RightRail";
 import { Shell } from "./Shell";
 import { accentOf } from "./theme";
 import { isActivity } from "./timelineScale";
@@ -342,13 +342,14 @@ export default function CompanyHome() {
               : undefined
           }
         />
-        <ApprovalsPanel
+        <RailAccordion
           approvals={approvals}
           funcOf={funcOf}
           showFunc={selected === "company"}
           scopeLabel={selFn ? selFn.name : "any function"}
           onApprove={(id) => void resolve(id, true)}
           onReject={(id) => void resolve(id, false)}
+          reminderSource={selFn ? fnTimeline : home?.timeline ?? []}
         />
       </div>
       {askAgent ? (

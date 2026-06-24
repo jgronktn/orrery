@@ -342,7 +342,10 @@ def home(
     for f in funcs:
         stream = db.get(Project, f["stream_id"])
         if stream is not None:
-            timeline.extend(projects.build_timeline(stream, None, db))
+            nodes = projects.build_timeline(stream, None, db)
+            for n in nodes:
+                n["function"] = f["key"]  # tag each node with its owning function
+            timeline.extend(nodes)
     timeline.sort(key=lambda n: n["time"], reverse=True)
     timeline = timeline[:50]
 

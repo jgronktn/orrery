@@ -13,7 +13,7 @@ import {
 import { FileViewer, type PreviewFile } from "./FileViewer";
 import { FunctionFiles } from "./FunctionFiles";
 import { FunctionTimeline } from "./FunctionTimeline";
-import { ApprovalsPanel, AskBar } from "./RightRail";
+import { AskBar, RailAccordion } from "./RightRail";
 import { Shell } from "./Shell";
 import { accentOf } from "./theme";
 import { isActivity, nodeStorePath } from "./timelineScale";
@@ -331,7 +331,7 @@ export default function FunctionStream() {
           {/* lower area below the timeline: left half = the function's file
               folder system; right = open file preview / agent answer */}
           <div className="flex min-h-0 flex-1">
-            <div className="flex w-1/2 min-w-0 border-r border-line">
+            <div className="flex w-[35%] min-w-0 border-r border-line">
               <FunctionFiles
                 variant="fill"
                 containerKey={key}
@@ -415,13 +415,14 @@ export default function FunctionStream() {
                 onDelete={() => void onDelete(current)}
               />
             ) : (
-              <ApprovalsPanel
+              <RailAccordion
                 approvals={fnApprovals}
                 funcOf={() => key}
                 showFunc={false}
                 scopeLabel={fn?.name ?? key}
                 onApprove={(id) => void resolve(id, true)}
                 onReject={(id) => void resolve(id, false)}
+                reminderSource={nodes}
               />
             )}
           </div>

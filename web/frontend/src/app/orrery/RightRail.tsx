@@ -4,6 +4,7 @@ import type { ProposalRecord, TimelineNode } from "../../api/client";
 import { FunctionTimeline } from "./FunctionTimeline";
 import { funcLabel, risk } from "./theme";
 import { relAgo } from "./time";
+import { daysFromNow, fmtDate } from "./timelineScale";
 
 // ── Timeline panel — a compact version of the function-page timeline ─
 
@@ -38,9 +39,159 @@ export function TimelinePanel({
   );
 }
 
-// ── Pending approvals ───────────────────────────────────────────────
+// ── Right-rail accordion: Pending approvals · Reminders ─────────────
+// Two selectable bars; one section open at a time. Reminders open by
+// default. Reminders = upcoming timeline reminders (past ones drop off).
 
-export function ApprovalsPanel({
+export function RailAccordion({
+  approvals,
+  funcOf,
+  showFunc,
+  scopeLabel,
+  onApprove,
+  onReject,
+  reminderSource,
+}: {
+  approvals: ProposalRecord[];
+  funcOf: (p: ProposalRecord) => string;
+  showFunc: boolean;
+  scopeLabel: string;
+  onApprove: (id: string) => void;
+  onReject: (id: string) => void;
+  reminderSource: TimelineNode[];
+}) {
+  const [open, setOpen] = useState<"approvals" | "reminders">("reminders");
+
+  // Upcoming reminders only: drop anything dated before today (UTC start of
+  // day, since timeline items sit at noon UTC). Soonest first.
+  const now = new Date();
+  const todayStartUTC = Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate(),
+  );
+  const reminders = reminderSource
+    .filter((n) => n.type === "reminder" && n.time >= todayStartUTC)
+    .sort((a, b) => a.time - b.time);
+
+  return (
+    <section>
+      <RailBar
+        label="Pending approvals"
+        open={open === "approvals"}
+        count={approvals.length}
+        onClick={() => setOpen("approvals")}
+      />
+      {open === "approvals" && (
+        <ApprovalsBody
+          approvals={approvals}
+          funcOf={funcOf}
+          showFunc={showFunc}
+          scopeLabel={scopeLabel}
+          onApprove={onApprove}
+          onReject={onReject}
+        />
+      )}
+      <RailBar
+        label="Reminders"
+        open={open === "reminders"}
+        count={reminders.length}
+        onClick={() => setOpen("reminders")}
+      />
+      {open === "reminders" && (
+        <RemindersBody reminders={reminders} scopeLabel={scopeLabel} />
+      )}
+    </section>
+  );
+}
+
+// A selectable accordion header bar.
+function RailBar({
+  label,
+  open,
+  count,
+  onClick,
+}: {
+  label: string;
+  open: boolean;
+  count: number;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex w-full items-center justify-between border-b border-hairline px-5 py-3.5 text-left hover:bg-rowhover"
+    >
+      <span className="flex items-center gap-2">
+        <span className="font-mono text-[10px] leading-none text-hint" aria-hidden>
+          {open ? "▾" : "▸"}
+        </span>
+        <span className="text-[13px] font-semibold text-ink">{label}</span>
+      </span>
+      <Badge n={count} />
+    </button>
+  );
+}
+
+// Upcoming reminders, soonest first.
+function RemindersBody({
+  reminders,
+  scopeLabel,
+}: {
+  reminders: TimelineNode[];
+  scopeLabel: string;
+}) {
+  if (reminders.length === 0) {
+    return (
+      <div className="px-5 py-6 text-center text-[12.5px] text-hint">
+        No upcoming reminders in {scopeLabel}.
+      </div>
+    );
+  }
+  return (
+    <div>
+      {reminders.map((r) => (
+        <div
+          key={r.id}
+          className="flex items-start justify-between gap-3 border-t border-hairline px-5 py-2.5"
+        >
+          <span className="flex min-w-0 items-start gap-2">
+            <span
+              className="mt-1 h-2 w-2 shrink-0 rounded-full"
+              style={{ background: "#b25c72" }}
+            />
+            <span className="min-w-0">
+              <span className="block truncate text-[12.5px] text-strong">
+                {r.name}
+              </span>
+              {r.function && (
+                <span className="block truncate font-mono text-[9.5px] uppercase tracking-[0.1em] text-muted-alt">
+                  {funcLabel(r.function)}
+                </span>
+              )}
+              {r.note && (
+                <span className="block truncate text-[11px] text-hint">
+                  {r.note}
+                </span>
+              )}
+            </span>
+          </span>
+          <span className="shrink-0 text-right">
+            <span className="block font-mono text-[10px] text-muted-alt">
+              {fmtDate(r.time)}
+            </span>
+            <span className="block font-mono text-[9.5px] text-hint">
+              {daysFromNow(r.time)}
+            </span>
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Pending approvals list (the accordion's other section).
+function ApprovalsBody({
   approvals,
   funcOf,
   showFunc,
@@ -57,14 +208,7 @@ export function ApprovalsPanel({
 }) {
   const [open, setOpen] = useState<string | null>(null);
   return (
-    <section>
-      <div className="flex items-center justify-between border-b border-hairline px-5 pb-3.5 pt-[44px]">
-        <span className="text-[13px] font-semibold text-ink">
-          Pending approvals
-        </span>
-        <Badge n={approvals.length} />
-      </div>
-
+    <>
       {approvals.length === 0 ? (
         <div className="px-5 py-6 text-center text-[12.5px] text-hint">
           Nothing waiting in {scopeLabel}.
@@ -121,7 +265,7 @@ export function ApprovalsPanel({
           ))}
         </div>
       )}
-    </section>
+    </>
   );
 }
 

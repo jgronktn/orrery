@@ -383,7 +383,7 @@ export function CanvasAccordion({
           <div key={s.id} className={open ? "flex min-h-0 flex-1 flex-col" : "shrink-0"}>
             <button
               onClick={() => onOpen(s.id)}
-              className="flex w-full shrink-0 items-center gap-2 border-b border-line bg-paper-alt px-5 py-3 text-left hover:bg-rowhover"
+              className="flex h-[50px] w-full shrink-0 items-center gap-2 border-b border-line bg-paper-alt px-5 text-left hover:bg-rowhover"
             >
               <span className="font-mono text-[10px] leading-none text-hint" aria-hidden>
                 {open ? "▾" : "▸"}

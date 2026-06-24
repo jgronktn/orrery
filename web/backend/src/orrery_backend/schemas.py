@@ -234,6 +234,7 @@ class TimelineNode(BaseModel):
     facet: str | None = None
     note: str | None = None
     direction: str | None = None  # email: "out" (sent) | "in" (received)
+    function: str | None = None  # owning function key — set on the company union timeline
 
 
 class TimelineNoteIn(BaseModel):

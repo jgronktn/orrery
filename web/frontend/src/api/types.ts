@@ -961,6 +961,8 @@ export interface components {
                 [key: string]: unknown;
             } | null;
             callback?: components["schemas"]["AgentCallback"] | null;
+            /** Request Id */
+            request_id?: string | null;
         };
         /** AgentResponse */
         AgentResponse: {
@@ -1483,6 +1485,8 @@ export interface components {
             note?: string | null;
             /** Direction */
             direction?: string | null;
+            /** Function */
+            function?: string | null;
         };
         /** TimelineNoteIn */
         TimelineNoteIn: {
