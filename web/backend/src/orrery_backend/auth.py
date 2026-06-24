@@ -54,26 +54,38 @@ def _start_session(db: DbSession, user: User, response: Response) -> None:
     )
 
 
+# Slide the session's expiry/last_used_at at most this often, instead of on
+# every request — removes a write from the hot path. Expiry is still CHECKED on
+# every request (correctness unchanged); we just don't re-stamp it each time.
+_SLIDE_AFTER = timedelta(minutes=5)
+
+
 def current_user(request: Request, db: DbSession = Depends(get_db)) -> User:
     """Resolve the authenticated user from the session cookie, or 401.
-    Slides the session's expiry forward on each use."""
+    Slides the session's expiry forward (throttled to once per _SLIDE_AFTER)."""
     raw = request.cookies.get(settings.session_cookie_name)
     if not raw:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "not authenticated")
     sid = unsign_session(raw)
     if not sid:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid session")
-    sess = db.get(Session, sid)
+    # One round trip: the session + its user (instead of two PK lookups).
+    row = db.execute(
+        select(Session, User).join(User, User.id == Session.user_id).where(
+            Session.id == sid
+        )
+    ).first()
     now = _utcnow()
-    if sess is None or sess.expires_at <= now:
+    if row is None or row[0].expires_at <= now:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "session expired")
-    user = db.get(User, sess.user_id)
-    if user is None or user.status != "active":
+    sess, user = row
+    if user.status != "active":
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "user inactive")
-    # Sliding expiration.
-    sess.last_used_at = now
-    sess.expires_at = now + timedelta(hours=settings.session_ttl_hours)
-    db.commit()
+    # Sliding expiration — throttled: only re-stamp (a write) once it's stale.
+    if sess.last_used_at < now - _SLIDE_AFTER:
+        sess.last_used_at = now
+        sess.expires_at = now + timedelta(hours=settings.session_ttl_hours)
+        db.commit()
     return user
 
 

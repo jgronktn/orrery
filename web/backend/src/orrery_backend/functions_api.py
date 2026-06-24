@@ -55,8 +55,24 @@ def _resolve_stream(key: str, user: User, db: DbSession) -> Project:
     return stream
 
 
-def function_out(key: str, stream: Project, db: DbSession) -> dict:
+def _function_payload(
+    key: str, stream: Project, *, file_count: int, reminder_count: int, pending_count: int
+) -> dict:
     fdef = functions.FUNCTIONS[key]
+    return {
+        "key": key, "name": fdef.name, "folder": fdef.folder,
+        "agent": functions.agent_for_function(key),
+        "facets": functions.facets_for(key),
+        "stream_id": stream.id,
+        "file_count": file_count,
+        "reminder_count": reminder_count,
+        "pending_count": pending_count,
+    }
+
+
+def function_out(key: str, stream: Project, db: DbSession) -> dict:
+    """Single-function payload (used by GET /{key}). For the multi-function
+    list, list_functions batches these counts — see below."""
     file_count = db.scalar(
         select(func.count()).select_from(Catalog).where(
             Catalog.container_kind == "function", Catalog.function == key
@@ -67,33 +83,77 @@ def function_out(key: str, stream: Project, db: DbSession) -> dict:
             Task.project_id == stream.id, Task.kind == "reminder", Task.status != "done"
         )
     ) or 0
-    return {
-        "key": key, "name": fdef.name, "folder": fdef.folder,
-        "agent": functions.agent_for_function(key),
-        "facets": functions.facets_for(key),
-        "stream_id": stream.id,
-        "file_count": file_count,
-        "reminder_count": reminder_count,
-        "pending_count": functions.pending_synth_count(stream, db),
-    }
+    return _function_payload(
+        key, stream,
+        file_count=file_count,
+        reminder_count=reminder_count,
+        pending_count=functions.pending_synth_count(stream, db),
+    )
 
 
 @router.get("", response_model=list[FunctionOut])
 def list_functions(
     user: User = Depends(current_user), db: DbSession = Depends(get_db)
 ) -> list[dict]:
-    out: list[dict] = []
-    for key in functions.ACTIVE_FUNCTIONS:
-        if not functions.can_access_function(user, key):
-            continue
-        stream = db.scalar(
+    # Batched: instead of ~4 count queries per function (× N functions), run one
+    # grouped query per metric across all accessible functions — 5 queries total
+    # regardless of how many functions exist. Feeds /api/home's badge counts.
+    keys = [k for k in functions.ACTIVE_FUNCTIONS if functions.can_access_function(user, k)]
+    if not keys:
+        return []
+    streams = {
+        p.function: p
+        for p in db.scalars(
             select(Project).where(
-                Project.kind == "function_stream", Project.function == key
+                Project.kind == "function_stream", Project.function.in_(keys)
             )
         )
-        if stream is not None:
-            out.append(function_out(key, stream, db))
-    return out
+    }
+    keys = [k for k in keys if k in streams]
+    sids = [streams[k].id for k in keys]
+
+    files = dict(
+        db.execute(
+            select(Catalog.function, func.count())
+            .where(Catalog.container_kind == "function", Catalog.function.in_(keys))
+            .group_by(Catalog.function)
+        ).all()
+    )
+    reminders = dict(
+        db.execute(
+            select(Task.project_id, func.count())
+            .where(Task.project_id.in_(sids), Task.kind == "reminder", Task.status != "done")
+            .group_by(Task.project_id)
+        ).all()
+    )
+    pend_cat = dict(
+        db.execute(
+            select(Catalog.function, func.count())
+            .where(
+                Catalog.container_kind == "function",
+                Catalog.function.in_(keys),
+                Catalog.synthesized == "pending",
+            )
+            .group_by(Catalog.function)
+        ).all()
+    )
+    pend_task = dict(
+        db.execute(
+            select(Task.project_id, func.count())
+            .where(Task.project_id.in_(sids), Task.synthesized == "pending")
+            .group_by(Task.project_id)
+        ).all()
+    )
+
+    return [
+        _function_payload(
+            k, streams[k],
+            file_count=files.get(k, 0),
+            reminder_count=reminders.get(streams[k].id, 0),
+            pending_count=pend_cat.get(k, 0) + pend_task.get(streams[k].id, 0),
+        )
+        for k in keys
+    ]
 
 
 @router.get("/{key}", response_model=FunctionOut)
