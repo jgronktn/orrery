@@ -12,7 +12,8 @@ dependencies = [
     "pydantic-ai>=0.4,<1.0",
     "httpx>=0.27,<1.0",
     # HTTP service (the agent is a stateless service the backend calls).
-    "fastapi>=0.110,<1.0",
+    # Capped <0.137 to match the backend (otel-fastapi instrumentation compat).
+    "fastapi>=0.110,<0.137",
     "uvicorn[standard]>=0.29,<1.0",
 ]
 

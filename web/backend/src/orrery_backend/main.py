@@ -24,17 +24,11 @@ logging.basicConfig(level=logging.INFO)
 
 app = FastAPI(title="Orrery Backend", version="0.1.0")
 
-# Observability: instrument httpx (backend→agent calls) + the SQLAlchemy engine.
-# Inert until LOGFIRE_TOKEN is set. (PydanticAI itself is instrumented inside the
-# agent services, where the agent loop runs.)
-#
-# NOTE: FastAPI auto-instrumentation is intentionally NOT enabled here. The
-# otel-fastapi instrumentation version pinned by logfire crashes on FastAPI
-# 0.138's included-router internals (`_IncludedRouter` has no `path`), which
-# 500s every /api/* request. The agents (which mount routes directly, not via
-# include_router) still instrument FastAPI fine. Revisit backend request spans
-# when that version incompatibility is resolved.
-configure_observability("orrery-backend", engine=engine)
+# Observability: trace the FastAPI request → agent HTTP call → Postgres queries
+# as one tree. Inert until LOGFIRE_TOKEN is set. (PydanticAI itself is
+# instrumented inside the agent services, where the agent loop runs.)
+# FastAPI instrumentation requires fastapi<0.137 — see web/backend/pyproject.toml.
+configure_observability("orrery-backend", app=app, engine=engine)
 
 
 @app.on_event("startup")

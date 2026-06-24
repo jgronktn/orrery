@@ -14,7 +14,8 @@ dependencies = [
     "google-api-python-client>=2.0,<3.0",
     "markdown>=3.5,<4.0",
     # HTTP service (the agent is a stateless service the backend calls).
-    "fastapi>=0.110,<1.0",
+    # Capped <0.137 to match the backend (otel-fastapi instrumentation compat).
+    "fastapi>=0.110,<0.137",
     "uvicorn[standard]>=0.29,<1.0",
 ]
 
