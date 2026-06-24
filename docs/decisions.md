@@ -439,44 +439,87 @@ per-agent permission admin UI.
 
 ---
 
-## Where we left off (2026-06-13)
+## 2026-06-24 — Executive Assistant (corporate): the cross-function "superagent"
 
-**Orrery is an operational web app.** A signed-in user picks a project (or
-the global context), chats with the engineering agent, and resolves
-proposals — all on the local filesystem document store.
+Stood up the **second agent** — the executive assistant, whose home is the
+Corporate function. Unlike a function-scoped agent, its distinguishing trait is
+**reach**: a *global* `FileStoreReader` (`build_global_reader` — every top-level
+folder + all projects) plus the shared KB, so it answers company-wide questions.
+It's the agent at the **company core** (no function selected) and on the
+Corporate function. Its one write is `propose_draft` → a medium-risk
+`save_draft` proposal that, on approval, lands a new file in `corporate/drafts/`.
+
+Built by **cloning the engineering package** (`agents/corporate/`,
+`orrery_corporate`) against the unchanged shared harness — same `build_model`,
+`Agent`/tools/deps, `pm.register`; new `config/corporate/agent.md`; registered in
+the backend `REGISTRY`; `functions.corp.agent_id="corporate"`. New container on
+:8002. This validated the "register a URL + give a function its `agent_id`"
+extension path with no schema change.
+
+**Deliberately deferred (clean seams):** cross-agent querying (EA → other
+agents — needs an `ask_agent` tool + a recursion-guarded `/internal/agent/ask`),
+and founder/CEO/CFO **role-gating** (`User.role` + `accessible_functions`). For
+now the EA is available to everyone, matching the solo-founder reality.
+
+Direction heuristic for email (timeline "To"/"From" + above/below placement) is
+decided by `ORRERY_COMPANY_EMAIL_DOMAINS`; computed at build time from the
+catalog description, no migration.
+
+Would reconsider when: the EA genuinely needs to delegate to other agents
+(build the backend-mediated ask path then), or multi-user arrives (turn on
+role-gating).
+
+---
+
+## Where we left off (2026-06-24)
+
+**Orrery is an operational web app.** A signed-in user works the orrery map,
+opens function/project pages, chats with an agent (engineering, or the executive
+assistant at the company core), browses files, works the activity timeline, and
+resolves proposals — all on the local filesystem document store.
 
 What's built and verified:
 
-- **Engineering agent** — file-store Q&A with citations (filename+content
-  search; PDFs surfaced by path, not extracted), Exa parts research with
-  verify-notes, Markdown drafting into `drafts/`, human-approved datasheet
-  download. Runs as an HTTP service (`:8001`) AND a CLI.
+- **Two agents** — **engineering** (`:8001`, HTTP + CLI): file-store Q&A with
+  citations, folder browsing (`list_directory`), reading of Markdown/Word/ODT +
+  parsed `.eml`, Exa parts research, Markdown drafting, human-approved datasheet
+  download; reader scoped to engineering + the current project. **Executive
+  assistant** (`corporate`, `:8002`): cross-function reach (global reader over
+  all functions + projects), drafts into `corporate/drafts/`; answers at the
+  company core and on Corporate.
 - **Backend** (`:8000`, FastAPI on Postgres) — Argon2 email/password auth +
-  sessions + password reset; agent registry + routing; persisted
-  conversations keyed on (user, agent, project); the approval queue
+  sessions + password reset; agent registry + routing (engineering + corporate);
+  persisted conversations keyed on (user, agent, project); the approval queue
   (risk-routed proposals); the `/internal/agent` API for project tools.
-- **Frontend** (`:5173`, React+Vite+TS) — auth, project-primary nav, the
-  conversation canvas (Markdown + proposals + artifacts), pending-approvals
-  panel.
-- **Document store** — `/var/lib/orrery/files/`, a git repo; every agent
-  write is committed.
+- **Frontend** (`:5173`, React+Vite+TS) — the orrery map, function + project
+  pages, a **file browser** (tree + preview, incl. `.odt`/`.eml`), scrolling
+  agent conversations in a **Projects/Conversation accordion**, the **activity
+  timeline** (drop files/emails, add notes/tasks/reminders/milestones; type
+  strip + icon; emails above/below by direction with To/From; days-from-now
+  chip; selecting a file/email highlights it in the tree), and an IT credential
+  vault.
+- **Document store** — `/var/lib/orrery/files/`, a git repo; every write is
+  committed. Rich cataloging: text extraction (incl. `.odt`/`.eml` body), keyword
+  + vector search, email From/To/Cc/attachments + direction.
 - **Cross-functional projects** — `project_agents` / `project_member_agents`,
   per-project folder trees + sectioned research logs, and shared task +
-  research-log tools any agent inherits (only engineering wired).
+  research-log tools any agent inherits.
 
 Run it: `make up` (backend stack) + `npm run dev` (frontend). CLI:
 `make ask|chat|draft|save-spec`, plus KB tools. Everything is committed and
 pushed to `github.com/jgronktn/orrery`.
 
-**Next (per CLAUDE.md):** Gmail/email integration (inbox view,
-thread→project assignment with KB ingestion, outbound Gmail drafts), then a
-file-browser UI, the `infra/` relocation of compose, real Postmark, and
-deployment to a DigitalOcean Droplet.
+**Next (per CLAUDE.md):** Gmail/email integration (inbox view, thread→project
+assignment with KB ingestion, outbound Gmail drafts); cross-agent querying for
+the EA + founder/CEO/CFO role-gating; real Postmark; and deployment to a
+DigitalOcean Droplet.
 
 **Things that may surprise a fresh reader:**
 
-- The **support agent is gone** (deleted in the 2026-06-12 restructure).
-  Engineering is the only agent.
+- Two agents now: **engineering** and the cross-function **executive assistant**
+  (`corporate`). The support agent is gone (deleted in the 2026-06-12
+  restructure). Agents still never talk to each other — the EA's cross-agent
+  querying is deferred.
 - Documents are on the **local filesystem** (git-versioned), NOT Google
   Drive. Drive is an archive only; the service account is kept for Gmail.
 - The agent has **no write, network-fetch, or database tool**. Writes go

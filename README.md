@@ -1,10 +1,11 @@
 # Orrery
 
 Internal AI-agent system for a small hardtech company. Orrery is a
-**monorepo web application**: function-scoped agents (engineering today;
-bookkeeping, corporate, an executive assistant, and more to come) wrapped by a
-FastAPI backend and a React UI with authentication, cross-functional projects,
-an approval queue, and (soon) email integration.
+**monorepo web application**: function-scoped agents (an **engineering** agent
+and a cross-function **executive assistant** today; bookkeeping and more to
+come) wrapped by a FastAPI backend and a React UI with authentication,
+cross-functional projects, an activity timeline, an approval queue, and (soon)
+email integration.
 
 Three ideas shape everything:
 
@@ -17,24 +18,35 @@ Three ideas shape everything:
   auto-executes, **medium/high** queue for human approval. Reasoning tools are
   read-only; writes go through bounded, human-gated paths.
 - **Projects are cross-functional.** A product project engages multiple agents
-  at once. The schema models that from the start (only engineering is wired
-  today), so future agents slot in without retrofitting.
+  at once. The schema models that from the start, so future agents slot in
+  without retrofitting.
 
-## The engineering agent (the one that's built)
+## The agents
 
-Helps with the company's engineering work, two halves:
+**Engineering** — helps with the company's engineering work, two halves:
 
 - **Inward** — reads the company's engineering documents in the **local file
   store** (specs, SOWs, design docs, testing checklists, certifications),
-  answers with citations, and drafts new documents from templates into a
-  `drafts/` folder (never overwriting originals).
+  browses folders, reads documents (Markdown/Word/ODT/PDF-by-pointer and parsed
+  `.eml` emails), answers with citations, and drafts new documents from
+  templates into a `drafts/` folder (never overwriting originals).
 - **Outward** — researches parts and vendor options via one controlled
   web-search tool (Exa), always citing sources with a "verify before relying on
   this" note. It's a *finder, not an oracle*.
 
-It also has the shared **project tools** (tasks + a structured research log) it
-inherits like any agent. It runs as an HTTP service the backend calls, and as a
-CLI for local use.
+Its file tools are scoped to the engineering corpus plus, inside a project
+conversation, that project's folder.
+
+**Executive Assistant (corporate)** — the cross-function "superagent." Its home
+is the Corporate function, but it **reads across everything** (every function
+folder + all projects + the shared knowledge base), synthesizes, and drafts
+corporate documents into `corporate/drafts/` via the same propose→approve flow.
+It answers at the company core (no function selected) and on the Corporate
+function. (Cross-agent querying and founder/CEO/CFO role-gating are deferred
+with clean seams.)
+
+Both run as HTTP services the backend calls; engineering also has a CLI. Every
+agent inherits the shared **project tools** (tasks + a structured research log).
 
 ## Document store (local filesystem, git-versioned)
 
@@ -60,9 +72,9 @@ non-project work, and per-project folders gated by project membership.
 
 ```
 ┌────────────┐     ┌──────────────────┐     ┌───────────────────────┐
-│  frontend  │ ──▶ │  backend (8000)  │ ──▶ │ engineering agent     │
-│ React+Vite │     │  FastAPI: auth,  │     │ (HTTP service, 8001)  │
-│  (5173)    │ ◀── │  projects, gov.  │ ◀── │ PydanticAI loop       │
+│  frontend  │ ──▶ │  backend (8000)  │ ──▶ │ engineering agent 8001 │
+│ React+Vite │     │  FastAPI: auth,  │     │ exec-assistant   8002  │
+│  (5173)    │ ◀── │  projects, gov.  │ ◀── │ (HTTP, PydanticAI)     │
 └────────────┘     └────────┬─────────┘     └───────┬───────────────┘
         project tools (tasks, research log)  ▲      │
         via /internal/agent (callback token) └──────┘
@@ -75,6 +87,10 @@ non-project work, and per-project folders gated by project membership.
                    └─────────────────┘   │ Exa (web search)     │
                                          └─────────────────────┘
 ```
+
+The backend's agent **registry** maps each `agent_id` to its service URL;
+adding an agent is "register the URL + give a function its `agent_id`," no
+schema change.
 
 - **Gateway** — LiteLLM fronts Anthropic Claude; all model + embedding calls
   route through it (the API key lives in one container).
@@ -93,20 +109,24 @@ non-project work, and per-project folders gated by project membership.
 agents/
   engineering/            # the engineering agent (package: orrery_engineering)
     src/  Dockerfile  pyproject.toml  tests/
+  corporate/              # the executive-assistant agent (package: orrery_corporate)
+    src/  Dockerfile  pyproject.toml
   lib/                    # shared library (package: orrery_lib)
     src/                  #   schema (agent↔backend contract), gateway client,
                           #   KB wrapper, filestore (docs+git), pm (project tools)
 web/
   backend/                # FastAPI app (package: orrery_backend) + alembic
   frontend/               # React + Vite + TypeScript (auth + conversation UI)
-config/engineering/agent.md   # the agent's behavior (git-tracked, human-edited)
+config/
+  engineering/agent.md    # each agent's behavior (git-tracked, human-edited)
+  corporate/agent.md
 gateway/                  # LiteLLM model routing
 docs/                     # architecture + decisions log
 docker-compose.yml        # local dev stack
 Makefile                  # ergonomic targets
 ```
 
-Behavior is config (`config/engineering/agent.md`); code is code; documents live
+Behavior is config (`config/<function>/agent.md`); code is code; documents live
 in the file store; learned facts live in the KB. Kept separate.
 
 ## Quickstart
@@ -118,11 +138,13 @@ sudo mkdir -p /var/lib/orrery/files && sudo chown -R $(id -u):$(id -g) /var/lib/
 ( cd /var/lib/orrery/files && git init -b main )
 
 make build                  # build the agent + backend images
-make up                     # gateway, qdrant, engineering, postgres, backend
+make up                     # gateway, qdrant, engineering, corporate, postgres, backend
 npm install && npm run dev  # frontend → http://localhost:5173
 ```
 
-Backend at `http://localhost:8000`, engineering agent at `:8001`, UI at `:5173`.
+Backend at `http://localhost:8000`, engineering agent at `:8001`, executive
+assistant at `:8002`, UI at `:5173`. (The agent services run with
+`restart: unless-stopped`, so they come back after a host/Docker reboot.)
 
 The agent also has a CLI (shares the engineering image):
 
@@ -152,16 +174,27 @@ Run `make` with no args to see all targets.
 
 ## Status
 
-**Built and verified:** the engineering agent (file-store Q&A with citations,
-Exa parts research, Markdown drafting, human-approved spec download) as CLI +
-HTTP service; the FastAPI backend (email/password auth, sessions, password
-reset, agent registry/routing) on Postgres; the React frontend (auth +
-project-scoped conversation canvas); cross-functional **projects** (multi-agent
-schema, per-project folder trees + sectioned research logs, shared task +
-research-log tools via the internal agent API); and the **approval queue**
-(risk-routed proposals, pending-approvals UI, Slack notifications). Document
-storage runs on the local filesystem with git versioning.
+**Built and verified:**
+
+- **Two agents** — engineering (file-store Q&A with citations, folder browsing,
+  `.eml`/`.odt` reading, Exa parts research, Markdown drafting, human-approved
+  spec download; CLI + HTTP) and the cross-function **executive assistant**
+  (reads across all functions + projects, drafts corporate docs).
+- **Backend** (FastAPI on Postgres) — Argon2 email/password auth + sessions +
+  password reset; the agent registry/routing; persisted conversations; the
+  **approval queue** (risk-routed proposals, Slack notices); the
+  `/internal/agent` callback API for project tools.
+- **Frontend** (React+Vite+TS) — the orrery map, per-function and per-project
+  pages, a **file browser** (tree + document preview, incl. Markdown/CSV/`.odt`/
+  `.eml`), scrolling agent conversations in an accordion canvas, and an
+  **activity timeline** (files/emails/notes/tasks/reminders/milestones; drag to
+  add; emails placed by direction with "To"/"From"; hover shows days-from-now).
+- **Cross-functional projects** — multi-agent schema, per-project folder trees +
+  sectioned research logs, shared task + research-log tools.
+- **Document store** — local filesystem with git versioning; rich cataloging
+  (text extraction, keyword + vector search, email From/To/attachments).
 
 **Next:** Gmail/email integration (inbox view, thread→project assignment,
-outbound drafts), a file-browser UI, and deployment to a DigitalOcean Droplet.
-See `docs/decisions.md` for the decision log and `CLAUDE.md` for the full plan.
+outbound drafts); cross-agent querying for the EA + role-gating; real Postmark;
+and deployment to a DigitalOcean Droplet. See `docs/decisions.md` for the
+decision log and `CLAUDE.md` for the full plan.

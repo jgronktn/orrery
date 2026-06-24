@@ -1,12 +1,12 @@
 # Orrery — Current Architecture (as-built)
 
-_Generated 2026-06-22 from a read of the actual code. Describes what exists today, not the long-term design. Inconsistencies and half-built seams are flagged in the last section._
+_Generated 2026-06-22, refreshed 2026-06-24, from a read of the actual code. Describes what exists today, not the long-term design. Inconsistencies and half-built seams are flagged in the last section._
 
 ## Overview
 
-Orrery is a monorepo "company operating system": a **React frontend** → **FastAPI backend** (the only thing that talks to anything privileged) → a **stateless PydanticAI engineering agent** that reaches Claude through a **LiteLLM gateway**, with **Postgres** for relational state, **Qdrant** for vector search, and a **git-versioned file store** (`ORRERY_FILES_ROOT`) shared between the backend and the agent.
+Orrery is a monorepo "company operating system": a **React frontend** → **FastAPI backend** (the only thing that talks to anything privileged) → **stateless PydanticAI agents** that reach Claude through a **LiteLLM gateway**, with **Postgres** for relational state, **Qdrant** for vector search, and a **git-versioned file store** (`ORRERY_FILES_ROOT`) shared between the backend and the agents.
 
-The core domain idea: a **Function** (Corporate, Engineering, IT, HR, Accounting) is a first-class *container* that owns a folder, a timeline, files, and facets — independent of whether an **Agent** occupies it. Functions and **Projects** are both stored as rows in one `projects` table, discriminated by a `kind` column. Today only Engineering has a live agent ("Forge", registry id `engineering`).
+The core domain idea: a **Function** (Corporate, Engineering, IT, HR, Accounting) is a first-class *container* that owns a folder, a timeline, files, and facets — independent of whether an **Agent** occupies it. Functions and **Projects** are both stored as rows in one `projects` table, discriminated by a `kind` column. Two agents are live today: the **engineering** agent (registry id `engineering`, scoped to the engineering corpus + the current project's folder) and the **executive assistant** (registry id `corporate`, Corporate's agent and the company-core agent, which reads across the *entire* file store + all projects). Standing up another agent is still "register the URL + give a function its `agent_id`," no schema change.
 
 ---
 
@@ -20,8 +20,8 @@ flowchart LR
     api["/api/* routers + /internal/agent/*"]
   end
 
-  subgraph agentsvc["engineering agent (FastAPI :8001)"]
-    agentloop["PydanticAI loop + tools"]
+  subgraph agentsvc["agents (FastAPI, PydanticAI loop + tools)"]
+    agentloop["engineering :8001 · executive assistant :8002"]
   end
 
   gateway["gateway — LiteLLM :4000"]
@@ -44,7 +44,7 @@ flowchart LR
   api -.->|"approval notices"| slack
 ```
 
-**Docker services** (`docker-compose.yml`): `gateway` (LiteLLM), `qdrant`, `engineering` (agent HTTP :8001), `postgres:16`, `backend` (:8000), and an `agent` CLI profile (same image as `engineering`). The frontend dev server (Vite :5173) runs outside compose and proxies `/api` to the backend. `backend` and `engineering` both bind-mount `/var/lib/orrery/files` read-write; Qdrant and Postgres use named volumes.
+**Docker services** (`docker-compose.yml`): `gateway` (LiteLLM), `qdrant`, `engineering` (agent HTTP :8001), `corporate` (executive-assistant HTTP :8002), `postgres:16`, `backend` (:8000), and an `agent` CLI profile (same image as `engineering`). All long-running services use `restart: unless-stopped`, so they recover after a host/Docker reboot. The frontend dev server (Vite :5173) runs outside compose and proxies `/api` to the backend. `backend`, `engineering`, and `corporate` all bind-mount `/var/lib/orrery/files` read-write; Qdrant and Postgres use named volumes.
 
 ---
 
@@ -65,8 +65,8 @@ flowchart TB
     iagent["/internal/agent — tasks (CRUD), task docs, research-log read/append"]
   end
 
-  agents -->|"HTTP POST /run, /execute"| ENG["engineering agent"]
-  ENG -->|"calls back"| iagent
+  agents -->|"HTTP POST /run, /execute"| AG["engineering · executive-assistant"]
+  AG -->|"calls back"| iagent
   approvals --> CP["commit_path.execute_file_op (FILE_OPS)"]
   files --> CP
   functions --> CP
@@ -78,7 +78,7 @@ flowchart TB
 | `auth.py` | Email/password identity, Argon2 hashes, server-side sessions (sliding 14-day), password reset (token emailed — see flags). |
 | `projects.py` | Project lifecycle + membership; the shared `get_container()` (resolves project membership OR function access); tasks (action items/reminders/milestones); the unified `build_timeline`; per-container search; document drop; task↔document attachments. |
 | `functions_api.py` | Function-as-container ops: tree, search, timeline, document drop (with `dir`), and **folder create/recursive-delete** (risk-routed); plus `/api/home`. |
-| `agents.py` | Agent registry (only `engineering`), stateless `/run`, persisted conversations (`messages`), and **proposal routing** (classify → low auto-executes, medium/high queue). |
+| `agents.py` | Agent registry (`engineering` + `corporate`), stateless `/run`, persisted conversations (`messages`), and **proposal routing** (classify → low auto-executes, medium/high queue). |
 | `approvals.py` | The human approval queue. On approve: `FILE_OPS` execute locally via `commit_path`; agent proposals delegate to the agent's `/execute`. |
 | `files.py` | Read (`raw`/`text`) + human file mutations (rename/move/delete), all risk-routed by destination path. |
 | `internal.py` | The agent's callback surface (tasks, task-doc links, research-log) — guarded by a short-lived signed callback token + an "agent engaged on this container" check. |
@@ -167,14 +167,15 @@ Tables: `users`, `sessions`, `password_reset_tokens`, `projects`, `project_membe
 ```mermaid
 flowchart TB
   subgraph reg["functions.py registry (ACTIVE_FUNCTIONS)"]
-    corp["corp · Corporate · folder corporate · agent: none · facets: ip,equity,financial,governance,contracts"]
+    corp["corp · Corporate · folder corporate · agent: corporate (exec assistant) · facets: ip,equity,financial,governance,contracts"]
     engr["engr · Engineering · folder engineering · agent: engineering · facets: specs,drafts,templates,design-docs,certifications,contractors,archive"]
     it["it · IT · folder it · agent: none · facets: ()"]
     hr["hr · HR · folder hr · agent: none · facets: ()"]
     acct["acct · Accounting · folder accounting · agent: none · facets: ()"]
   end
 
-  engr -->|agent_for_function| FORGE["engineering agent service"]
+  engr -->|agent_for_function| FORGE["engineering agent service :8001"]
+  corp -->|agent_for_function| EA["executive-assistant service :8002"]
 
   subgraph proj["projects table (one shape, two kinds)"]
     stream["kind=function_stream — one row per function, function=key, created_by=NULL, slug=key"]
@@ -207,14 +208,16 @@ Sensitive destinations (`corporate/equity/`, `corporate/financial/debt/`) and `s
 
 ---
 
-## 5. Engineering agent + web↔agent round trip
+## 5. Agents + web↔agent round trip
 
-The agent (`agents/engineering`, FastAPI :8001) exposes `GET /health`, `POST /run` (`AgentRequest → AgentResponse`), and `POST /execute` (bounded write after approval). It's a **PydanticAI** loop whose model is built by `orrery_lib.gateway` against the LiteLLM gateway. Behavior lives in `config/engineering/agent.md` (loaded at startup).
+Each agent is a FastAPI service exposing `GET /health`, `POST /run` (`AgentRequest → AgentResponse`), and `POST /execute` (bounded write after approval). It's a **PydanticAI** loop whose model is built by `orrery_lib.gateway` against the LiteLLM gateway. Behavior lives in `config/<function>/agent.md` (loaded at startup).
 
-**Tools** (`agents/engineering/.../agent.py` + `orrery_lib/pm.py`):
-- Read-only: `search_files`, `read_file`, `search_docs` (Qdrant `documents`), `search_kb` (Qdrant `learnings`), `add_kb` (proposal-queue only), `web_search` (Exa).
-- Proposal-only writes: `request_spec_save` (stages a URL; no I/O) and draft creation (separate module). The agent never writes the file store directly during reasoning.
+**Engineering agent** (`agents/engineering`, :8001). **Tools** (`.../agent.py` + `orrery_lib/pm.py`):
+- Read-only: `search_files`, `list_directory`, `read_file` (Markdown/Word/ODT plus parsed `.eml`; PDFs by pointer), `search_docs` (Qdrant `documents`), `search_kb` (Qdrant `learnings`), `add_kb` (proposal-queue only), `web_search` (Exa). Its `FileStoreReader` is scoped to the engineering corpus, plus the current project's folder when a project `callback`/context is present (`build_reader`).
+- Proposal-only writes: `request_spec_save` (stages a URL; no I/O) and draft creation. The agent never writes the file store directly during reasoning.
 - Project-scoped (only when a `callback` is present): `list/create/update task`, `link_task_to_doc`, `read/append research-log` — all HTTP calls back into `/internal/agent/*`.
+
+**Executive-assistant agent** (`agents/corporate`, :8002). Same shape; behavior in `config/corporate/agent.md`. Its reader is the **global reader** (`build_global_reader` — every top-level folder + all projects), giving it cross-function reach. Its one write is `propose_draft` → a `save_draft` proposal (medium-risk) that, on approval, `execute_action` writes into `corporate/drafts/`. (Cross-agent querying and role-gating are deferred.)
 
 **Round trip:** Frontend `POST /api/agents/engineering/messages` → backend builds `AgentRequest` (history + `project_context` + a signed `AgentCallback` when project-scoped) → `POST http://engineering:8001/run` → agent runs, optionally calling back into `/internal/agent/*` with the token → returns `AgentResponse{text, artifacts, proposals}` → backend classifies/routes proposals and persists the conversation. `orrery_lib` also holds the shared `schema` (AgentRequest/Response, Proposal, Artifact), `kb`, `docstore` (the `documents` collection, 1:1 with files), and `filestore` (git-committed reads/writes). Embeddings: `BAAI/bge-small-en-v1.5` (384-dim), pinned in payloads.
 
@@ -245,16 +248,18 @@ Function folders mirror the registry (`engr`→`engineering`, `acct`→`accounti
 ```mermaid
 flowchart TB
   main["main.tsx → BrowserRouter + AuthProvider"] --> app["App.tsx (routes)"]
-  app -->|"/"| home["CompanyHome"]
-  app -->|"/fn/:key"| fn["FunctionStream"]
-  app -->|"/project/:id"| pv["ProjectView (STUB)"]
+  app -->|"/"| home["CompanyHome (map · EA at the core · IT vault)"]
+  app -->|"/fn/:key"| fn["FunctionStream (timeline · files · Projects/Conversation accordion)"]
+  app -->|"/project/:id"| pv["ProjectView (timeline · files · Conversation)"]
   app -->|unauth| login["LoginPage"]
 
   home --> map["OrreryMap"]
   home --> ffiles["FunctionFiles (filesystem panel)"]
   home --> fview["FileViewer"]
+  home --> vault["LoginVault (IT credential vault)"]
   home --> rail["RightRail: TimelinePanel · ApprovalsPanel · AskBar"]
   fn --> ftl["FunctionTimeline"]
+  fn --> conv["Conversation (accordion) · CanvasAccordion"]
   fn --> rail
   map --> ftlmini["FunctionTimeline (compact, in rail)"]
 
@@ -263,19 +268,20 @@ flowchart TB
   fn --> client
 ```
 
-The live UI is the warm-paper set under `src/app/orrery/` (`Shell`, `CompanyHome`, `OrreryMap`, `FunctionFiles`, `FileViewer`, `FunctionStream`, `FunctionTimeline`, `RightRail`, `ProjectView`, plus `theme/time/timelineScale`). `api/client.ts` is a thin typed fetch layer over `api/types.ts`, which is generated from the backend's OpenAPI (`npm run gen:types`). Routes: `/` = Company Home (orrery map + file panel + right rail), `/fn/:key` = Function page (250px timeline + composer + 25% approvals/ask sidebar), `/project/:id` = **stub**.
+The live UI is the warm-paper set under `src/app/orrery/` (`Shell`, `CompanyHome`, `OrreryMap`, `FunctionFiles`, `FileViewer`, `FunctionStream`, `FunctionTimeline`, `RightRail`, `ProjectView`, `LoginVault`, `timelineSurface` (Composer · Conversation · CanvasAccordion · DetailPanel · TypeGlyph), plus `theme/time/timelineScale`). `api/client.ts` is a thin typed fetch layer over `api/types.ts`, generated from the backend's OpenAPI (`npm run gen:types`). Routes: `/` = Company Home (orrery map + file panel + right rail; the EA answers at the core; selecting IT opens the credential vault), `/fn/:key` = Function page (250px timeline + composer; lower canvas is a left file tree + a right **Projects/Conversation accordion**; 25% approvals/ask sidebar), `/project/:id` = Project page (timeline + composer; file tree + a **Conversation** pane; open-items/ask sidebar). Timeline tags carry a colored type strip + icon, place emails above/below the axis by direction with "To"/"From", and show a days-from-now chip on hover; selecting a file/email highlights + reveals it in the file tree.
 
 ---
 
 ## 8. Flags — half-built, deferred, or inconsistent
 
 **Stubs / not wired**
-- **ProjectView** (`/project/:id`) is a placeholder — the route renders "a later increment." Project Views are linked to from the map/function rows but lead nowhere real yet.
+- **Cross-agent querying**: the EA cannot yet ask other agents (the "ask another agent" tool + a recursion-guarded internal endpoint are deferred — a clean seam).
+- **EA role-gating**: the EA is available to everyone; the founder/CEO/CFO restriction (`User.role` + `accessible_functions`) is left as a seam. `User.role` exists but is unused.
 - **Knowledge synthesis** (Tier 2): `Catalog.synthesized`, `Task.synthesized`, `Project.last_synthesized_at` are written (set to `pending` on edits) but **no pass ever reads them** — no synthesizer exists. `pending_synth_count` drives the Home "N pending" badges off data nothing consumes.
 - **Email**: only a console sender exists; password-reset links are logged, not sent (Postmark deferred).
 - **Google Drive**: `orrery_lib/drive.py` and `ORRERY_ENG_DRIVE_*` env vars exist but are unused (Phase-1 uses the local git store).
 - **MFA**: `User.mfa_*` columns exist, never enforced.
-- **Per-user agent permissions**: `project_member_agents` (`can_talk`/`can_approve`) table exists but is never checked — "any authenticated user may use engineering."
+- **Per-user agent permissions**: `project_member_agents` (`can_talk`/`can_approve`) table exists but is never checked — any authenticated user may use either agent.
 
 **Inconsistencies**
 - **Company name**: frontend hardcodes `"PPI"` (CompanyHome/FunctionStream/ProjectView) while the backend `config.company_name` is `"Orrery"` and `/api/home` returns it — the UI ignores the backend value.
