@@ -117,14 +117,14 @@ export function FunctionFiles({
     <div
       className={
         variant === "fill"
-          ? "flex h-full w-full flex-col bg-paper-alt"
-          : "flex w-[520px] shrink-0 flex-col border-r border-line bg-paper-alt"
+          ? "flex h-full w-full flex-col bg-[#f1f1ef]"
+          : "flex w-[520px] shrink-0 flex-col border-r border-line bg-[#f1f1ef]"
       }
     >
-      <div className="flex h-[50px] items-center gap-2 border-b border-line px-4">
+      <div className="flex h-[50px] items-center gap-2 border-b border-[#f8f8f6] bg-[#e8e8e4] px-4">
         <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: accent }} />
         <span className="flex min-w-0 flex-col">
-          <span className="truncate font-mono text-[10px] uppercase leading-tight tracking-[0.14em] text-faint">
+          <span className="truncate text-[13px] font-semibold uppercase leading-tight tracking-[0.08em] text-muted">
             {title}
           </span>
           <span
