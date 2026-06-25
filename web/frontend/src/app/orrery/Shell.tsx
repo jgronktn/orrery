@@ -46,7 +46,7 @@ function Topbar({
 }) {
   const { user } = useAuth();
   return (
-    <div className="flex h-14 items-center justify-between border-b border-line bg-paper-alt px-[18px]">
+    <div className="flex h-14 items-center justify-between border-b border-line bg-[radial-gradient(circle_at_50%_46%,#FCFCFB_0%,#F6F6F4_62%,#F1F1ED_100%)] px-[18px]">
       {/* left — breadcrumb */}
       <div className="flex min-w-0 items-center gap-2 text-[13px]">
         <span className="font-bold text-ink">{company}</span>
