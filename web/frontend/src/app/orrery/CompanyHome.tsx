@@ -405,7 +405,7 @@ export default function CompanyHome() {
     <Shell
       company={company}
       crumbs={[{ label: "Company map" }]}
-      status="LIVE · ALL FUNCTIONS IN MOTION"
+      status={selFn?.name}
     >
       {error && (
         <div className="border-b border-line bg-[#f1e7e3] px-6 py-2 text-[12px] text-[#8a4a3c]">
