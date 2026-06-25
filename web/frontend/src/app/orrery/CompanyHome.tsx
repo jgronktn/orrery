@@ -504,7 +504,7 @@ function AttachedTools() {
           <div key={t.abbr} className="flex flex-col items-center gap-1.5">
             <span
               data-orrery-tool
-              className="grid h-12 w-12 place-items-center rounded-full border border-dashed border-line-soft bg-white font-mono text-[14px] text-hint"
+              className="grid h-12 w-12 place-items-center rounded-full border border-dashed border-line-soft bg-white font-mono text-[14px] text-hint shadow-[0_2px_8px_-2px_rgba(20,18,12,0.25)]"
             >
               {t.abbr}
             </span>
