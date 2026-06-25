@@ -41,7 +41,7 @@ export function OrreryMap({
     : "translateY(-65px) scale(1.3)";
 
   return (
-    <div className="relative grid flex-1 place-items-center overflow-hidden bg-[radial-gradient(circle_at_50%_46%,#FCFCFB_0%,#F6F6F4_62%,#F1F1ED_100%)]">
+    <div className="relative grid flex-1 place-items-center overflow-hidden bg-[#F4F4F4]">
       {/* core → attached-tool tethers: above the gradient, behind everything
           else (placed first so it paints under the stage's bodies) */}
       {toolLines.length > 0 && (
