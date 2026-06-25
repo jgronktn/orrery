@@ -260,7 +260,7 @@ export function FunctionTimeline({
   return (
     <div
       ref={ref}
-      className="relative h-full w-full cursor-grab overflow-hidden bg-[radial-gradient(circle_at_50%_50%,#F5F7EE_0%,#EEF0E6_100%)] active:cursor-grabbing"
+      className="relative h-full w-full cursor-grab overflow-hidden bg-[radial-gradient(circle_at_50%_50%,#f7f5f0_0%,#f1efe9_100%)] active:cursor-grabbing"
       onWheel={onWheel}
       onMouseDown={onMouseDown}
       onMouseLeave={hideTip}
@@ -294,9 +294,9 @@ export function FunctionTimeline({
     >
       <svg width={W} height={H} className="absolute inset-0">
         {weekendBands.map((b, i) => (
-          <rect key={i} x={b.x} y={0} width={b.w} height={H} fill="#9ba08b" opacity={0.16} />
+          <rect key={i} x={b.x} y={0} width={b.w} height={H} fill="#969386" opacity={0.16} />
         ))}
-        <line x1={0} y1={axisY} x2={W} y2={axisY} stroke="#d2d6c2" strokeWidth={1.5} />
+        <line x1={0} y1={axisY} x2={W} y2={axisY} stroke="#d5d2c9" strokeWidth={1.5} />
         {ticks.map((tk) => {
           const x = xAt(tk.t);
           const big = tk.label != null; // labeled (day / Monday) ticks read stronger
@@ -308,7 +308,7 @@ export function FunctionTimeline({
                 y1={axisY - (bnd ? 11 : big ? 6 : 4)}
                 x2={x}
                 y2={axisY + (bnd ? 11 : big ? 6 : 4)}
-                stroke={bnd ? "#9ba08b" : big ? "#b6bba6" : "#cdd1c1"}
+                stroke={bnd ? "#969386" : big ? "#b8b5ab" : "#cfccc3"}
                 strokeWidth={bnd ? 4 : 1}
               />
               {tk.label && (
@@ -363,7 +363,7 @@ export function FunctionTimeline({
                 cy={axisY}
                 r={sel ? d.dot + 1.5 : d.dot}
                 fill={typeColor(n)}
-                stroke={sel ? "#1b1a17" : "#F5F7EE"}
+                stroke={sel ? "#1c1b18" : "#f7f5f0"}
                 strokeWidth={sel ? 1.5 : 1.5}
                 style={{ cursor: onSelect ? "pointer" : "default" }}
                 onMouseDown={(e) => e.stopPropagation()}
@@ -412,7 +412,7 @@ export function FunctionTimeline({
               top,
               width: d.cardW,
               height: d.cardH,
-              borderColor: selected ? color : "#e0e3d4",
+              borderColor: selected ? color : "#e3e1da",
               boxShadow: selected
                 ? `0 0 0 2px ${color}66, 0 6px 16px -8px ${color}88`
                 : "0 2px 8px -4px rgba(20,18,12,.28)",
@@ -423,7 +423,7 @@ export function FunctionTimeline({
                 square vertical edge on the right; near-white type icon */}
             <span
               className="flex shrink-0 items-center justify-center"
-              style={{ width: d.strip, background: color, color: "#eef1e7" }}
+              style={{ width: d.strip, background: color, color: "#f1efe9" }}
             >
               <TypeGlyph type={p.node.type} size={compact ? 13 : 16} />
             </span>

@@ -142,7 +142,7 @@ export function LoginVault({ accent, onClose }: { accent: string; onClose: () =>
                 <span className="truncate text-[11.5px] text-muted" title={l.note || undefined}>
                   {l.note || "—"}
                 </span>
-                <span className="font-mono text-[10px] uppercase tracking-wide" style={{ color: l.mfa ? accent : "#b05c6e" }}>
+                <span className="font-mono text-[10px] uppercase tracking-wide" style={{ color: l.mfa ? accent : "#9c6470" }}>
                   {l.mfa ? "on" : "off"}
                 </span>
                 <span className="flex justify-self-end gap-1 opacity-0 group-hover:opacity-100">
@@ -156,7 +156,7 @@ export function LoginVault({ accent, onClose }: { accent: string; onClose: () =>
                   <button
                     onClick={() => remove(l.id)}
                     title="Remove"
-                    className="grid h-6 w-6 place-items-center rounded text-hint hover:bg-line hover:text-[#8a3b2e]"
+                    className="grid h-6 w-6 place-items-center rounded text-hint hover:bg-line hover:text-[#8a4a3c]"
                   >
                     <XGlyph />
                   </button>

@@ -71,7 +71,7 @@ function Topbar({
           {company}
         </span>
         <span
-          className="grid h-8 w-8 place-items-center rounded-full bg-ink text-[11px] font-semibold text-[#f4f6ee]"
+          className="grid h-8 w-8 place-items-center rounded-full bg-ink text-[11px] font-semibold text-[#f6f4ef]"
           title={user?.display_name}
         >
           {user ? initials(user.display_name) : "··"}
@@ -87,7 +87,7 @@ function Crumbpart({ c }: { c: Crumb }) {
     <span
       className={
         c.back
-          ? "inline-flex items-center gap-1 rounded-lg border border-line-soft bg-[#efebe1] px-2 py-0.5 text-[12px] text-strong-alt hover:bg-rowhover"
+          ? "inline-flex items-center gap-1 rounded-lg border border-line-soft bg-[#efece4] px-2 py-0.5 text-[12px] text-strong-alt hover:bg-rowhover"
           : c.mono
             ? "font-mono text-[10px] uppercase tracking-[0.1em] text-faint"
             : "inline-flex items-center gap-1.5 text-[13px] text-strong"

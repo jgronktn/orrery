@@ -285,12 +285,12 @@ export default function ProjectView() {
         {/* main */}
         <div className="flex min-w-0 flex-1 flex-col">
           {err && (
-            <div className="border-b border-line bg-[#fbecea] px-6 py-2 text-[12px] text-[#8a3b2e]">
+            <div className="border-b border-line bg-[#f1e7e3] px-6 py-2 text-[12px] text-[#8a4a3c]">
               {err}
             </div>
           )}
           {notice && (
-            <div className="border-b border-line bg-[#eef4e8] px-6 py-2 text-[12px] text-[#3f6b2e]">
+            <div className="border-b border-line bg-[#e8edf1] px-6 py-2 text-[12px] text-[#3c5670]">
               {notice}
             </div>
           )}
@@ -507,7 +507,7 @@ function OpenItems({
                   </button>
                   <button
                     onClick={() => onResolve(p.id, true)}
-                    className="rounded-lg bg-ink px-2.5 py-0.5 text-[11.5px] text-[#f4f6ee] hover:bg-ink-soft"
+                    className="rounded-lg bg-ink px-2.5 py-0.5 text-[11.5px] text-[#f6f4ef] hover:bg-ink-soft"
                   >
                     Approve
                   </button>

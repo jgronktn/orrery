@@ -21,8 +21,9 @@ import {
 import { FileViewer, type PreviewFile } from "./FileViewer";
 import { FunctionFiles } from "./FunctionFiles";
 import { LoginVault } from "./LoginVault";
+import { FunctionTimeline } from "./FunctionTimeline";
 import { OrreryMap, type Selection } from "./OrreryMap";
-import { AskBar, RailAccordion, TimelinePanel } from "./RightRail";
+import { AskBar, RailAccordion } from "./RightRail";
 import { Shell } from "./Shell";
 import { accentOf } from "./theme";
 import { isActivity } from "./timelineScale";
@@ -311,37 +312,41 @@ export default function CompanyHome() {
     }
   };
 
-  // The right rail (timeline · approvals · ask) — present in the normal and
+  // The company timeline — moved to a horizontal strip across the top of the
+  // center column (was the rail's compact TimelinePanel). Same data + drop
+  // behavior as before; company-level accent is steel.
+  const timelineEvents = selFn
+    ? fnTimeline.filter(isActivity)
+    : // Company overview (no function selected): only reminders + milestones.
+      (home?.timeline ?? []).filter(
+        (n) => n.type === "reminder" || n.type === "milestone",
+      );
+  const onDropTimeline = selFn
+    ? async (file: File) => {
+        try {
+          await api.uploadFunctionDoc(selFn.key, file);
+          setReloadToken((n) => n + 1);
+          void load();
+        } catch (e) {
+          setError(e instanceof ApiError ? e.message : String(e));
+        }
+      }
+    : undefined;
+  const topTimeline = (
+    <div className="shrink-0 border-b border-line" style={{ height: 220 }}>
+      <FunctionTimeline
+        nodes={timelineEvents}
+        accent={selFn ? accentOf(selFn.key) : "#50708a"}
+        onDropFile={onDropTimeline}
+      />
+    </div>
+  );
+
+  // The right rail (approvals · reminders · ask) — present in the normal and
   // vault views, but covered by the full-bleed file preview.
   const rail = (
     <aside className="flex w-[calc(35%-25px)] min-w-[330px] flex-col border-l border-line bg-paper-alt">
       <div className="flex-1 overflow-y-auto">
-        <TimelinePanel
-          events={
-            selFn
-              ? fnTimeline.filter(isActivity)
-              : // Company overview (no function selected): only reminders +
-                // milestones. Every other timeline is unchanged.
-                (home?.timeline ?? []).filter(
-                  (n) => n.type === "reminder" || n.type === "milestone",
-                )
-          }
-          scope={selFn?.name}
-          accent={selFn ? accentOf(selFn.key) : "#353a32"}
-          onDropFile={
-            selFn
-              ? async (file) => {
-                  try {
-                    await api.uploadFunctionDoc(selFn.key, file);
-                    setReloadToken((n) => n + 1);
-                    void load();
-                  } catch (e) {
-                    setError(e instanceof ApiError ? e.message : String(e));
-                  }
-                }
-              : undefined
-          }
-        />
         <RailAccordion
           approvals={approvals}
           funcOf={funcOf}
@@ -403,7 +408,7 @@ export default function CompanyHome() {
       status="LIVE · ALL FUNCTIONS IN MOTION"
     >
       {error && (
-        <div className="border-b border-line bg-[#fbecea] px-6 py-2 text-[12px] text-[#8a3b2e]">
+        <div className="border-b border-line bg-[#f1e7e3] px-6 py-2 text-[12px] text-[#8a4a3c]">
           {error}
         </div>
       )}
@@ -445,7 +450,7 @@ export default function CompanyHome() {
             <div ref={centerRef} className="relative flex min-w-0 flex-1 flex-col">
               {chatOpen ? (
                 <Conversation
-                  accent={selFn ? accentOf(selFn.key) : "#353a32"}
+                  accent={selFn ? accentOf(selFn.key) : "#2b2a26"}
                   agentName={selFn ? selFn.name : company}
                   messages={messages}
                   pending={pending}
@@ -455,6 +460,7 @@ export default function CompanyHome() {
                 />
               ) : (
                 <>
+                  {topTimeline}
                   <OrreryMap
                     functions={fns}
                     selected={selected}

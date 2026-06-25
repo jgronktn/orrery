@@ -149,7 +149,7 @@ export function FileViewer({
               </button>
               <button
                 onClick={() => onDelete(file.path)}
-                className="rounded-lg bg-ink px-3 py-1 text-[12px] text-[#f4f6ee] hover:bg-ink-soft"
+                className="rounded-lg bg-ink px-3 py-1 text-[12px] text-[#f6f4ef] hover:bg-ink-soft"
               >
                 Delete
               </button>

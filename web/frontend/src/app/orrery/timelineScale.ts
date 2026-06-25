@@ -63,20 +63,20 @@ export function fmtTick(t: number, step: number): string {
   return pad(d.getUTCHours()) + ":" + pad(d.getUTCMinutes());
 }
 
-// ── Type → color / label (warm-paper muted palette) ─────────────────
+// ── Type → color / label (greige + steel: desaturated, still distinct) ──
 export const TYPE_COLOR: Record<string, string> = {
-  code: "#5a7d9a",
-  style: "#8a6a9a",
-  markup: "#b05c6e",
-  data: "#5f7a4a",
-  doc: "#6f7363",
-  image: "#b07a3e",
-  email: "#2e6f6a",
-  task: "#a8842c",
-  milestone: "#353a32",
-  reminder: "#b25c72",
-  note: "#5a6e8c",
-  other: "#7e8270",
+  code: "#5c7488", // steel-leaning blue
+  style: "#806f86", // muted mauve
+  markup: "#9c6470", // muted clay
+  data: "#66745a", // muted olive
+  doc: "#6e6a5f", // greige
+  image: "#9a7d52", // muted ochre
+  email: "#4d726b", // muted teal
+  task: "#94824a", // muted gold
+  milestone: "#2b2a26", // ink
+  reminder: "#a86676", // clay-rose
+  note: "#66707f", // muted slate
+  other: "#79776b", // greige
 };
 export const TYPE_LABEL: Record<string, string> = {
   code: "Source",

@@ -10,10 +10,10 @@ import { daysFromNow, fmtClock, fmtDateY, typeLabel } from "./timelineScale";
 // answer panel, and the selected-item detail panel.
 
 export const KINDS = [
-  { value: "task", label: "Action item", color: "#a8842c" },
-  { value: "milestone", label: "Milestone", color: "#353a32" },
-  { value: "reminder", label: "Reminder", color: "#b25c72" },
-  { value: "note", label: "Note", color: "#5a6e8c" },
+  { value: "task", label: "Action item", color: "#94824a" },
+  { value: "milestone", label: "Milestone", color: "#2b2a26" },
+  { value: "reminder", label: "Reminder", color: "#a86676" },
+  { value: "note", label: "Note", color: "#66707f" },
 ] as const;
 
 // Display order in the composer: Note · Reminder · Action item · Milestone.
@@ -424,7 +424,7 @@ function UserTurn({
             onClick={onDelete}
             title="Remove this prompt and its response"
             aria-label="Remove this prompt and its response"
-            className="mt-0.5 grid h-[25px] w-[25px] shrink-0 cursor-pointer place-items-center rounded-full border bg-transparent text-[14px] leading-none text-ink/55 hover:text-[#8a3b2e]"
+            className="mt-0.5 grid h-[25px] w-[25px] shrink-0 cursor-pointer place-items-center rounded-full border bg-transparent text-[14px] leading-none text-ink/55 hover:text-[#8a4a3c]"
             style={{ borderColor: `${accent}80` }}
           >
             ✕
@@ -454,7 +454,7 @@ function AssistantTurn({
           <button
             onClick={onDelete}
             title="Remove this prompt and its response"
-            className="font-mono text-[11px] text-line-soft opacity-0 hover:text-[#8a3b2e] group-hover:opacity-100"
+            className="font-mono text-[11px] text-line-soft opacity-0 hover:text-[#8a4a3c] group-hover:opacity-100"
           >
             ✕
           </button>
@@ -582,7 +582,7 @@ export function DetailPanel({
         <div className="border-t border-line px-4 py-3">
           <button
             onClick={onDelete}
-            className="w-full rounded-lg border border-line-soft bg-white px-3 py-1.5 text-[12px] text-[#8a3b2e] hover:bg-[#fbecea]"
+            className="w-full rounded-lg border border-line-soft bg-white px-3 py-1.5 text-[12px] text-[#8a4a3c] hover:bg-[#f1e7e3]"
           >
             Remove from timeline
           </button>

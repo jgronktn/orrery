@@ -30,7 +30,7 @@ export function TimelinePanel({
       <div style={{ height: 180 }}>
         <FunctionTimeline
           nodes={events}
-          accent={accent ?? "#353a32"}
+          accent={accent ?? "#2b2a26"}
           compact
           onDropFile={onDropFile}
         />
@@ -158,7 +158,7 @@ function RemindersBody({
           <span className="flex min-w-0 items-start gap-2">
             <span
               className="mt-1 h-2 w-2 shrink-0 rounded-full"
-              style={{ background: "#b25c72" }}
+              style={{ background: "#a86676" }}
             />
             <span className="min-w-0">
               <span className="block truncate text-[12.5px] text-strong">
@@ -254,7 +254,7 @@ function ApprovalsBody({
                     </button>
                     <button
                       onClick={() => onApprove(p.id)}
-                      className="rounded-lg bg-ink px-3 py-1 text-[12px] text-[#f4f6ee] hover:bg-ink-soft"
+                      className="rounded-lg bg-ink px-3 py-1 text-[12px] text-[#f6f4ef] hover:bg-ink-soft"
                     >
                       Approve
                     </button>
@@ -291,8 +291,8 @@ function Badge({ n }: { n: number }) {
       className="grid h-5 min-w-5 place-items-center rounded-full px-1.5 text-[11px] font-semibold"
       style={
         n > 0
-          ? { background: "#353a32", color: "#f4f6ee" }
-          : { background: "#eceee3", color: "#8d917f" }
+          ? { background: "#2b2a26", color: "#f6f4ef" }
+          : { background: "#edece5", color: "#888578" }
       }
     >
       {n}
@@ -332,7 +332,7 @@ export function AskBar({
   return (
     <div className="border-t border-line bg-paper px-4 pb-[31px] pt-[31px]">
       <div className="mb-2 flex items-center gap-2">
-        <span className="grid h-7 w-7 place-items-center rounded-full bg-ink text-[12px] font-semibold text-[#f4f6ee]">
+        <span className="grid h-7 w-7 place-items-center rounded-full bg-ink text-[12px] font-semibold text-[#f6f4ef]">
           {agentName.slice(0, 1)}
         </span>
         <span className="text-[13px] font-semibold text-ink">{agentName}</span>
@@ -376,7 +376,7 @@ export function AskBar({
         <button
           onClick={submit}
           disabled={busy}
-          className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-ink text-[#f4f6ee] hover:bg-ink-soft disabled:opacity-50"
+          className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-ink text-[#f6f4ef] hover:bg-ink-soft disabled:opacity-50"
           aria-label="Send"
         >
           {busy ? "…" : "↑"}

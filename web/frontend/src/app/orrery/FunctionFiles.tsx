@@ -290,7 +290,7 @@ function TreeNode({
                   ops.onDeleteFolder(rel);
                   setConfirming(false);
                 }}
-                className="rounded bg-ink px-1.5 py-0.5 text-[#f4f6ee] hover:bg-ink-soft"
+                className="rounded bg-ink px-1.5 py-0.5 text-[#f6f4ef] hover:bg-ink-soft"
               >
                 Delete
               </button>
@@ -415,7 +415,7 @@ function FileRow({
         <FileGlyph accent={accent} />
         <span
           className="truncate text-[12.5px]"
-          style={{ color: active ? accent : "#646859", fontWeight: active ? 600 : 400 }}
+          style={{ color: active ? accent : "#605e54", fontWeight: active ? 600 : 400 }}
         >
           {node.name}
         </span>
@@ -435,7 +435,7 @@ function FileRow({
               ops.onDelete(path);
               setMode("idle");
             }}
-            className="rounded bg-ink px-1.5 py-0.5 text-[#f4f6ee] hover:bg-ink-soft"
+            className="rounded bg-ink px-1.5 py-0.5 text-[#f6f4ef] hover:bg-ink-soft"
           >
             Delete
           </button>

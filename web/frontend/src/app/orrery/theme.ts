@@ -53,12 +53,12 @@ export function bodyXY(key: string): { x: number; y: number } {
   return { x: CX + g.r * Math.cos(rad), y: CY + g.r * Math.sin(rad) };
 }
 
-// Risk ramp (monochrome) — bg/fg pairs keyed by the proposal risk string.
-const RISK_LOW = { bg: "#eceee3", fg: "#8d917f", label: "LOW" };
+// Risk ramp (monochrome, greige family) — mirrors the index.css risk tokens.
+const RISK_LOW = { bg: "#edece5", fg: "#888578", label: "LOW" };
 export const RISK: Record<string, { bg: string; fg: string; label: string }> = {
   low: RISK_LOW,
-  medium: { bg: "#d9dcca", fg: "#4c5045", label: "MED" },
-  high: { bg: "#353a32", fg: "#f4f6ee", label: "HIGH" },
+  medium: { bg: "#dcd9d1", fg: "#47463f", label: "MED" },
+  high: { bg: "#2b2a26", fg: "#f6f4ef", label: "HIGH" },
 };
 
 export function risk(level: string | null | undefined) {

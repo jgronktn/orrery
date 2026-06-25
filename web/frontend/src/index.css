@@ -10,35 +10,42 @@
   --font-sans: "Schibsted Grotesk", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
-  /* Neutrals — sage linen (cool, green-gray off-whites; ink is charcoal) */
-  --color-page: #e3e6db; /* outermost background */
-  --color-paper: #eef0e6; /* surface card */
-  --color-paper-alt: #f5f7ee; /* topbar, rails, main column */
-  --color-ink: #353a32; /* charcoal — core, timeline, primary buttons */
-  --color-ink-soft: #454a40; /* button hover */
-  --color-strong: #41463b; /* strong body */
-  --color-strong-alt: #4c5045;
-  --color-muted: #646859; /* secondary text */
-  --color-muted-alt: #6f7363;
-  --color-faint: #7e8270; /* tertiary text, section labels */
-  --color-faint-alt: #8d917f;
-  --color-hint: #9ba08b; /* mono captions, placeholders */
-  --color-hint-alt: #b0b49f;
+  /* Neutrals — greige (neutral warm-grey off-whites; ink is warm near-black).
+     Same lightness ramp as the prior sage-linen, with the green tilt removed
+     (R >= G > B) so surfaces read greige instead of sage. */
+  --color-page: #e8e6e1; /* outermost background */
+  --color-paper: #f1efe9; /* surface card */
+  --color-paper-alt: #f7f5f0; /* topbar, rails, main column */
+  --color-ink: #2b2a26; /* warm near-black — core, timeline, primary buttons */
+  --color-ink-soft: #3b3a35; /* button hover */
+  --color-strong: #3d3c35; /* strong body */
+  --color-strong-alt: #47463f;
+  --color-muted: #605e54; /* secondary text */
+  --color-muted-alt: #6a685d;
+  --color-faint: #79776b; /* tertiary text, section labels */
+  --color-faint-alt: #888578;
+  --color-hint: #969386; /* mono captions, placeholders */
+  --color-hint-alt: #aba89b;
 
-  --color-line: #e0e3d4; /* borders, dividers, tracks */
-  --color-line-soft: #d9dcca;
-  --color-line-strong: #d2d6c2;
-  --color-line-ring: #d6dac8;
-  --color-hairline: #e9ebde; /* inner dividers */
-  --color-rowhover: #f1f3ea; /* list/row hover bg */
+  --color-line: #e3e1da; /* borders, dividers, tracks */
+  --color-line-soft: #dcd9d1;
+  --color-line-strong: #d5d2c9;
+  --color-line-ring: #d8d5cc;
+  --color-hairline: #ecebe4; /* inner dividers */
+  --color-rowhover: #f3f1ec; /* list/row hover bg */
 
-  /* Risk ramp (monochrome, sage-linen family) */
-  --color-risk-low-bg: #eceee3;
-  --color-risk-low-fg: #8d917f;
-  --color-risk-med-bg: #d9dcca;
-  --color-risk-med-fg: #4c5045;
-  --color-risk-high-bg: #353a32;
-  --color-risk-high-fg: #f4f6ee;
+  /* Steel — the single chromatic accent (selection / "now" / active). */
+  --color-steel: #50708a;
+  --color-steel-soft: #6c89a0;
+  --color-steel-deep: #3c5670;
+
+  /* Risk ramp (monochrome, greige family) */
+  --color-risk-low-bg: #edece5;
+  --color-risk-low-fg: #888578;
+  --color-risk-med-bg: #dcd9d1;
+  --color-risk-med-fg: #47463f;
+  --color-risk-high-bg: #2b2a26;
+  --color-risk-high-fg: #f6f4ef;
 
   /* Motion — ambient orrery rotation + status pulse */
   --animate-orrery-spin: orrery-spin 58s linear infinite;
