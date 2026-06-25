@@ -345,7 +345,7 @@ export default function CompanyHome() {
   // The right rail (approvals · reminders · ask) — present in the normal and
   // vault views, but covered by the full-bleed file preview.
   const rail = (
-    <aside className="flex w-[calc(35%-25px)] min-w-[330px] flex-col border-l border-line bg-paper-alt">
+    <aside className="flex w-[calc(35%-25px)] min-w-[330px] flex-col border-l border-line bg-[#f1f1ef]">
       <div className="flex-1 overflow-y-auto">
         <RailAccordion
           approvals={approvals}
