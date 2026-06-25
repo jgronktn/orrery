@@ -120,7 +120,7 @@ function RailBar({
   return (
     <button
       onClick={onClick}
-      className="flex w-full items-center justify-between border-b border-[#f8f8f6] bg-[#e8e8e4] px-5 py-3.5 text-left hover:bg-rowhover"
+      className="flex h-[50px] w-full items-center justify-between border-b border-[#f8f8f6] bg-[#e8e8e4] px-5 text-left hover:bg-rowhover"
     >
       <span className="flex items-center gap-2">
         <span className="font-mono text-[10px] leading-none text-hint" aria-hidden>
