@@ -444,45 +444,49 @@ export default function CompanyHome() {
             {rail}
           </>
         ) : (
-          <>
-            {filePanel}
-            {/* center — orrery stage; tools float near the bottom */}
-            <div ref={centerRef} className="relative flex min-w-0 flex-1 flex-col">
-              {chatOpen ? (
-                <Conversation
-                  accent={selFn ? accentOf(selFn.key) : "#2b2a26"}
-                  agentName={selFn ? selFn.name : company}
-                  messages={messages}
-                  pending={pending}
-                  busy={busy}
-                  onClose={() => setChatOpen(false)}
-                  onDeleteTurn={(ids) => void onDeleteTurn(ids)}
-                />
-              ) : (
-                <>
-                  {topTimeline}
-                  <OrreryMap
-                    functions={fns}
-                    selected={selected}
-                    onSelect={setSelected}
-                    onOpen={(key) => navigate(`/fn/${key}`)}
-                    onOpenVault={() => setVaultOpen(true)}
-                    toolLines={toolLines}
-                    onDropFile={async (key, file) => {
-                      try {
-                        await api.uploadFunctionDoc(key, file);
-                        await load();
-                      } catch (e) {
-                        setError(e instanceof ApiError ? e.message : String(e));
-                      }
-                    }}
+          // Normal view: timeline spans the full width across the top; the
+          // file panel · map · rail sit in a row beneath it.
+          <div className="flex min-w-0 flex-1 flex-col">
+            {topTimeline}
+            <div className="flex min-h-0 flex-1">
+              {filePanel}
+              {/* center — orrery stage; tools float near the bottom */}
+              <div ref={centerRef} className="relative flex min-w-0 flex-1 flex-col">
+                {chatOpen ? (
+                  <Conversation
+                    accent={selFn ? accentOf(selFn.key) : "#2b2a26"}
+                    agentName={selFn ? selFn.name : company}
+                    messages={messages}
+                    pending={pending}
+                    busy={busy}
+                    onClose={() => setChatOpen(false)}
+                    onDeleteTurn={(ids) => void onDeleteTurn(ids)}
                   />
-                  <AttachedTools />
-                </>
-              )}
+                ) : (
+                  <>
+                    <OrreryMap
+                      functions={fns}
+                      selected={selected}
+                      onSelect={setSelected}
+                      onOpen={(key) => navigate(`/fn/${key}`)}
+                      onOpenVault={() => setVaultOpen(true)}
+                      toolLines={toolLines}
+                      onDropFile={async (key, file) => {
+                        try {
+                          await api.uploadFunctionDoc(key, file);
+                          await load();
+                        } catch (e) {
+                          setError(e instanceof ApiError ? e.message : String(e));
+                        }
+                      }}
+                    />
+                    <AttachedTools />
+                  </>
+                )}
+              </div>
+              {rail}
             </div>
-            {rail}
-          </>
+          </div>
         )}
       </div>
     </Shell>
