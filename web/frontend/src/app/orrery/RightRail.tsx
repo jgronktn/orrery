@@ -75,7 +75,7 @@ export function RailAccordion({
     .sort((a, b) => a.time - b.time);
 
   return (
-    <section>
+    <section className="bg-[#f1f1ef]">
       <RailBar
         label="Pending approvals"
         open={open === "approvals"}
