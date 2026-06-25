@@ -59,7 +59,7 @@ function Topbar({
       {status && (
         <div className="hidden items-center gap-2 md:flex">
           <span className="h-1.5 w-1.5 rounded-full bg-hint animate-orrery-pulse" />
-          <span className="font-mono text-[11px] uppercase tracking-[0.06em] text-hint">
+          <span className="font-mono text-[22px] uppercase tracking-[0.06em] text-hint">
             {status}
           </span>
         </div>
