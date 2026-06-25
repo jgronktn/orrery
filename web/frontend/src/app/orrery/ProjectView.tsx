@@ -316,7 +316,7 @@ export default function ProjectView() {
           {/* below the timeline — left half = project file system; right =
               open file preview / agent answer (rest built next) */}
           <div className="flex min-h-0 flex-1">
-            <div className="flex w-1/2 min-w-0 border-r border-line">
+            <div className="flex w-[35%] min-w-0 border-r border-line">
               {project && (
                 <FunctionFiles
                   variant="fill"

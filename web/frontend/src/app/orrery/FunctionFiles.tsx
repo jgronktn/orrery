@@ -121,13 +121,18 @@ export function FunctionFiles({
           : "flex w-[520px] shrink-0 flex-col border-r border-line bg-paper-alt"
       }
     >
-      <div className="flex items-center gap-2 border-b border-line px-4 py-3.5">
+      <div className="flex h-[50px] items-center gap-2 border-b border-line px-4">
         <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: accent }} />
-        <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.14em] text-faint">
-          {title}
-        </span>
-        <span className="truncate font-mono text-[10px] text-hint" title={`files/${rootPrefix}/`}>
-          ( files/{rootPrefix}/ )
+        <span className="flex min-w-0 flex-col">
+          <span className="truncate font-mono text-[10px] uppercase leading-tight tracking-[0.14em] text-faint">
+            {title}
+          </span>
+          <span
+            className="mt-[5px] truncate font-mono text-[10px] leading-tight text-hint"
+            title={`files/${rootPrefix}/`}
+          >
+            ( files/{rootPrefix}/ )
+          </span>
         </span>
         {busy && <span className="shrink-0 font-mono text-[9px] text-hint">adding…</span>}
         <button
@@ -135,7 +140,7 @@ export function FunctionFiles({
             setRootDraft("");
             setNewRoot(true);
           }}
-          className="ml-auto rounded border border-line-soft bg-white px-2 py-0.5 font-mono text-[10px] text-strong-alt hover:bg-rowhover"
+          className="ml-auto shrink-0 whitespace-nowrap rounded border border-line-soft bg-white px-2 py-0.5 font-mono text-[10px] text-strong-alt hover:bg-rowhover"
         >
           ＋ New folder
         </button>
