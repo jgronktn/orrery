@@ -260,7 +260,7 @@ export function FunctionTimeline({
   return (
     <div
       ref={ref}
-      className="relative h-full w-full cursor-grab overflow-hidden bg-[radial-gradient(circle_at_50%_50%,#f7f5f0_0%,#f1efe9_100%)] active:cursor-grabbing"
+      className="relative h-full w-full cursor-grab overflow-hidden bg-[#f1f1ef] active:cursor-grabbing"
       onWheel={onWheel}
       onMouseDown={onMouseDown}
       onMouseLeave={hideTip}
