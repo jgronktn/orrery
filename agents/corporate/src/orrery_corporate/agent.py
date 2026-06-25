@@ -99,10 +99,10 @@ def build_agent() -> Agent[CorporateDeps, str]:
         """Read a document by its `path` (from search_files or list_directory,
         e.g. 'corporate/governance/charter.md' or
         'projects/condensate-probe/attachments/note.eml'). Returns text for
-        Markdown/text/Word/ODT files and parsed email files (.eml — headers,
-        body, attachment names). For PDFs and other binaries it returns the
-        file's location to open directly — do not guess their contents.
-        Read-only.
+        Markdown/text/Word/ODT, PDF, and parsed email files (.eml — headers,
+        body, attachment names). Scanned/image-only PDFs have no text layer and
+        may return little or nothing. Other binaries (images, archives) return
+        the file's location to open directly — don't guess those. Read-only.
         """
         try:
             return ctx.deps.files.read(path)

@@ -112,10 +112,11 @@ def build_agent() -> Agent[EngineeringDeps, str]:
         """Read a document by its `path` (from search_files or list_directory,
         e.g. 'engineering/specs/spec-relay-5A.pdf' or
         'projects/leak-sensor/attachments/note.eml'). Returns the text for
-        Markdown/text/Word files and parsed email files (.eml — headers, body,
-        and attachment names). For PDFs and other binaries it returns the
-        file's location to open directly — do not guess their contents.
-        Read-only.
+        Markdown/text/Word/ODT, PDF, and parsed email files (.eml — headers,
+        body, and attachment names). Scanned/image-only PDFs have no text layer
+        and may return little or nothing; when quoting a datasheet spec, cite the
+        file and flag that the source should be verified. Other binaries (images,
+        archives) return the file's location to open directly. Read-only.
         """
         try:
             return ctx.deps.files.read(path)
