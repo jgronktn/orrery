@@ -49,6 +49,10 @@ export default function FunctionStream() {
   const [folders, setFolders] = useState<string[]>([]);
   const [reloadToken, setReloadToken] = useState(0);
   const [preview, setPreview] = useState<PreviewFile | null>(null);
+  // A just-dropped node: pan the timeline to its date so the drop is visible.
+  const [revealTime, setRevealTime] = useState<number | null>(null);
+  // Transient confirmation banner (e.g. after a drop). Auto-clears.
+  const [notice, setNotice] = useState<string | null>(null);
 
   const loadTimeline = useCallback(() => {
     api.functionTimeline(key).then(setNodes).catch(() => undefined);
@@ -67,6 +71,12 @@ export default function FunctionStream() {
   }, [key]);
   useEffect(() => loadTimeline(), [loadTimeline]);
   useEffect(() => loadApprovals(), [loadApprovals]);
+  // Auto-dismiss the transient confirmation banner.
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 4000);
+    return () => clearTimeout(t);
+  }, [notice]);
   useEffect(() => {
     let live = true;
     api
@@ -115,8 +125,19 @@ export default function FunctionStream() {
 
   const onDropFile = async (file: File) => {
     try {
-      await api.uploadFunctionDoc(key, file);
+      const node = await api.uploadFunctionDoc(key, file);
       refreshFiles();
+      // Reveal the drop so it never reads as a no-op: select it (opens the
+      // detail panel + auto-expands & highlights the file in the tree via
+      // activePath), pan the timeline to its date, and confirm.
+      setSelectedId(node.id);
+      setRevealTime(node.time);
+      const folder = node.path?.split("/").slice(-2, -1)[0];
+      setNotice(
+        folder
+          ? `Added “${node.name}” to ${folder}/.`
+          : `Added “${node.name}”.`,
+      );
     } catch (e) {
       fail(e);
     }
@@ -285,6 +306,11 @@ export default function FunctionStream() {
               {err}
             </div>
           )}
+          {notice && (
+            <div className="border-b border-line bg-[#eef4e8] px-6 py-2 text-[12px] text-[#3f6b2e]">
+              {notice}
+            </div>
+          )}
 
           <div className="flex items-center justify-between px-8 py-4">
             <div className="flex items-center gap-2.5">
@@ -321,7 +347,7 @@ export default function FunctionStream() {
               nodes={shown}
               accent={accent}
               selectedId={current?.id ?? null}
-              focusTime={focusNode?.time ?? null}
+              focusTime={focusNode?.time ?? revealTime}
               onSelect={(n) => setSelectedId(n ? n.id : null)}
               onDropFile={(f) => void onDropFile(f)}
               onDropKind={onDropKind}
