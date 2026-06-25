@@ -126,7 +126,7 @@ function RailBar({
         <span className="font-mono text-[10px] leading-none text-hint" aria-hidden>
           {open ? "▾" : "▸"}
         </span>
-        <span className="text-[13px] font-semibold text-ink">{label}</span>
+        <span className="text-[13px] font-semibold uppercase text-ink">{label}</span>
       </span>
       <Badge n={count} />
     </button>
