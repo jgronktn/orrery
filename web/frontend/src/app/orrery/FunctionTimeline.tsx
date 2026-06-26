@@ -470,8 +470,34 @@ export function FunctionTimeline({
       )}
 
       <div className="absolute bottom-2 right-2 flex items-center gap-2">
-        <ZoomBtn onClick={() => setPpm(clamp(pxPerMs * 1.6, minPpm, dayPpm))}>＋</ZoomBtn>
-        <ZoomBtn onClick={() => setPpm(clamp(pxPerMs / 1.6, minPpm, dayPpm))}>−</ZoomBtn>
+        <ZoomBtn onClick={() => setPpm(clamp(pxPerMs * 1.6, minPpm, dayPpm))}>
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="#50708a"
+            strokeWidth={2.3}
+            strokeLinecap="round"
+            aria-hidden
+          >
+            <path d="M8 2.6v10.8M2.6 8h10.8" />
+          </svg>
+        </ZoomBtn>
+        <ZoomBtn onClick={() => setPpm(clamp(pxPerMs / 1.6, minPpm, dayPpm))}>
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="#50708a"
+            strokeWidth={2.3}
+            strokeLinecap="round"
+            aria-hidden
+          >
+            <path d="M2.6 8h10.8" />
+          </svg>
+        </ZoomBtn>
         <button
           onClick={today}
           className="flex cursor-pointer items-center gap-1.5 font-mono text-[10px] text-[#50708a] hover:opacity-75"
