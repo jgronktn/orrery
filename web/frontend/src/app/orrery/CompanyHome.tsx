@@ -360,7 +360,11 @@ export default function CompanyHome() {
             >
               {selFn.name}
             </span>
-            <span aria-hidden style={{ color: accentOf(selFn.key) }}>
+            <span
+              aria-hidden
+              className="text-[20px] font-semibold leading-none"
+              style={{ color: accentOf(selFn.key) }}
+            >
               →
             </span>
           </button>
