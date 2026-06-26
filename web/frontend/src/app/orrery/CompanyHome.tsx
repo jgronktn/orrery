@@ -451,7 +451,7 @@ export default function CompanyHome() {
             <div className="flex min-h-0 flex-1">
               {filePanel}
               {/* center — orrery stage; tools float near the bottom */}
-              <div ref={centerRef} className="relative flex min-w-0 flex-1 flex-col">
+              <div ref={centerRef} className="relative flex min-w-0 flex-1 flex-col bg-[#FAFAFA]">
                 {chatOpen ? (
                   <Conversation
                     accent={selFn ? accentOf(selFn.key) : "#2b2a26"}
