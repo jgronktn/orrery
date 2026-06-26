@@ -341,13 +341,13 @@ export function AskBar({
         <span className="text-[13px] font-semibold uppercase tracking-[0.08em] text-muted">
           {agentName}
         </span>
-        {onReopen && reopenCount ? (
+        {onReopen ? (
           <button
             onClick={onReopen}
             className="ml-auto flex shrink-0 items-center gap-1 rounded-md border border-line-soft bg-white px-2 py-1 font-mono text-[10px] uppercase tracking-[0.08em] text-strong-alt hover:bg-rowhover"
           >
-            <span aria-hidden>↩</span>
-            view · {reopenCount}
+            <span aria-hidden>{reopenCount ? "↩" : "✦"}</span>
+            {reopenCount ? `view · ${reopenCount}` : "open chat"}
           </button>
         ) : (
           <span className="ml-auto truncate font-mono text-[10px] uppercase tracking-[0.08em] text-hint">

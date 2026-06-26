@@ -365,9 +365,7 @@ export default function CompanyHome() {
           onAsk={(p) => void onAsk(p)}
           busy={busy}
           onReopen={
-            !chatOpen && messages.length && !preview
-              ? () => setChatOpen(true)
-              : undefined
+            !chatOpen && !preview ? () => setChatOpen(true) : undefined
           }
           reopenCount={messages.filter((m) => m.role === "user").length}
         />
