@@ -308,8 +308,8 @@ export function Conversation({
   return (
     <div className="flex h-full flex-col">
       {!embedded && (
-        <div className="flex items-center justify-between gap-3 border-b border-line px-6 py-3">
-          <div className="font-mono text-[9.5px] uppercase tracking-[0.12em] text-hint">
+        <div className="flex h-[50px] items-center justify-between gap-3 border-b border-line px-6">
+          <div className="text-[13px] font-semibold uppercase tracking-[0.08em] text-muted">
             {agentName} · conversation
           </div>
           <button onClick={onClose} className="shrink-0 font-mono text-[12px] text-hint hover:text-strong">
