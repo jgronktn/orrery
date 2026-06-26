@@ -341,22 +341,21 @@ export function AskBar({
         <span className="text-[13px] font-semibold uppercase tracking-[0.08em] text-muted">
           {agentName}
         </span>
-        <span className="ml-auto truncate font-mono text-[10px] uppercase tracking-[0.08em] text-hint">
-          {scopeLabel}
-        </span>
+        {onReopen && reopenCount ? (
+          <button
+            onClick={onReopen}
+            className="ml-auto flex shrink-0 items-center gap-1 rounded-md border border-line-soft bg-white px-2 py-1 font-mono text-[10px] uppercase tracking-[0.08em] text-strong-alt hover:bg-rowhover"
+          >
+            <span aria-hidden>↩</span>
+            view · {reopenCount}
+          </button>
+        ) : (
+          <span className="ml-auto truncate font-mono text-[10px] uppercase tracking-[0.08em] text-hint">
+            {scopeLabel}
+          </span>
+        )}
       </div>
       <div className="px-4 pb-[31px] pt-3">
-      {onReopen && reopenCount ? (
-        <button
-          onClick={onReopen}
-          className="mb-2 flex w-full items-center gap-2 rounded-lg border border-line-soft bg-paper-alt px-3 py-2 text-left text-[12px] text-strong-alt hover:bg-rowhover"
-        >
-          <span aria-hidden>↩</span>
-          <span className="truncate">
-            View conversation · {reopenCount} message{reopenCount === 1 ? "" : "s"}
-          </span>
-        </button>
-      ) : null}
       <button
         onClick={() => onAsk(suggestion)}
         disabled={busy}

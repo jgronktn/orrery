@@ -369,7 +369,7 @@ export default function CompanyHome() {
               ? () => setChatOpen(true)
               : undefined
           }
-          reopenCount={messages.length}
+          reopenCount={messages.filter((m) => m.role === "user").length}
         />
       ) : (
         <div className="border-t border-line bg-paper px-4 py-4 text-[12px] text-hint">
