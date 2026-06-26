@@ -415,14 +415,14 @@ export function CanvasAccordion({
 }) {
   const single = sections.length === 1;
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-full min-h-0 flex-col bg-[#FAFAFA]">
       {sections.map((s) => {
         const open = single || s.id === openId;
         return (
           <div key={s.id} className={open ? "flex min-h-0 flex-1 flex-col" : "shrink-0"}>
             <button
               onClick={() => onOpen(s.id)}
-              className="flex h-[50px] w-full shrink-0 items-center gap-2 border-b border-line bg-paper-alt px-5 text-left hover:bg-rowhover"
+              className="flex h-[50px] w-full shrink-0 items-center gap-2 border-b border-line bg-[#FAFAFA] px-5 text-left hover:bg-rowhover"
             >
               <span className="font-mono text-[10px] leading-none text-hint" aria-hidden>
                 {open ? "▾" : "▸"}
