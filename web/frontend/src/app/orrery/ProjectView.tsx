@@ -314,7 +314,7 @@ export default function ProjectView() {
 
         {/* timeline band across the top, full width (like the main page) */}
         <div className="shrink-0">
-          <div className="border-b border-line" style={{ height: 250 }}>
+          <div className="border-b border-line" style={{ height: 220 }}>
             <FunctionTimeline
               nodes={shown}
               accent={accent}
