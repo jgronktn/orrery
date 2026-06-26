@@ -11,6 +11,7 @@ import { initials } from "./time";
 export interface Crumb {
   label: string;
   to?: string; // omitted = current / non-link
+  onClick?: () => void; // in-page action (e.g. deselect) instead of navigation
   dot?: string; // accent color for a leading dot (function crumbs)
   mono?: boolean; // render in mono (level tags like STREAM)
   back?: boolean; // render as a "← Map" chip
@@ -116,7 +117,15 @@ function Crumbpart({ c }: { c: Crumb }) {
       <span className="text-line-soft" aria-hidden>
         /
       </span>
-      {c.to ? <Link to={c.to}>{inner}</Link> : inner}
+      {c.to ? (
+        <Link to={c.to}>{inner}</Link>
+      ) : c.onClick ? (
+        <button onClick={c.onClick} className="cursor-pointer hover:opacity-70">
+          {inner}
+        </button>
+      ) : (
+        inner
+      )}
     </>
   );
 }

@@ -429,7 +429,14 @@ export default function CompanyHome() {
   return (
     <Shell
       company={company}
-      crumbs={[{ label: "Company map" }]}
+      crumbs={
+        selFn
+          ? [
+              { label: "Company map", onClick: () => setSelected("company") },
+              { label: selFn.name, dot: accentOf(selFn.key) },
+            ]
+          : [{ label: "Company map" }]
+      }
       status={selFn?.name}
     >
       {error && (
