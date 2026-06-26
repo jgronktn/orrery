@@ -373,7 +373,7 @@ export default function ProjectView() {
                     {
                       id: "conversation",
                       title: "Conversation",
-                      count: messages.length,
+                      count: messages.filter((m) => m.role === "user").length,
                       body: (
                         <Conversation
                           embedded
