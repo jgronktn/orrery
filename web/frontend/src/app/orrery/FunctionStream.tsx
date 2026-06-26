@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import {
   ApiError,
@@ -28,6 +28,9 @@ import {
 // and a 25% right sidebar with pending approvals over the agent ask.
 export default function FunctionStream() {
   const { key = "" } = useParams();
+  const [searchParams] = useSearchParams();
+  // Deep-link (?node=<id>) is applied once per node id.
+  const deepLinkApplied = useRef<string | null>(null);
   const accent = accentOf(key);
 
   const [fn, setFn] = useState<FunctionInfo | null>(null);
@@ -70,6 +73,19 @@ export default function FunctionStream() {
     api.getFunction(key).then(setFn).catch((e) => setErr(String(e)));
   }, [key]);
   useEffect(() => loadTimeline(), [loadTimeline]);
+  // Deep link from another page (e.g. a reminder clicked on the company map):
+  // once the timeline has loaded, select + focus the linked node.
+  useEffect(() => {
+    const nodeId = searchParams.get("node");
+    if (!nodeId || nodes.length === 0 || deepLinkApplied.current === nodeId)
+      return;
+    const n = nodes.find((x) => x.id === nodeId);
+    if (n) {
+      setSelectedId(n.id);
+      setRevealTime(n.time);
+      deepLinkApplied.current = nodeId;
+    }
+  }, [searchParams, nodes]);
   useEffect(() => loadApprovals(), [loadApprovals]);
   // Auto-dismiss the transient confirmation banner.
   useEffect(() => {

@@ -377,6 +377,11 @@ export default function CompanyHome() {
           onApprove={(id) => void resolve(id, true)}
           onReject={(id) => void resolve(id, false)}
           reminderSource={selFn ? fnTimeline : home?.timeline ?? []}
+          onReminderSelect={(r) => {
+            const fnKey = r.function ?? selFn?.key;
+            if (fnKey)
+              navigate(`/fn/${fnKey}?node=${encodeURIComponent(r.id)}`);
+          }}
         />
       </div>
       {askAgent ? (

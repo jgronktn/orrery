@@ -51,6 +51,7 @@ export function RailAccordion({
   onApprove,
   onReject,
   reminderSource,
+  onReminderSelect,
 }: {
   approvals: ProposalRecord[];
   funcOf: (p: ProposalRecord) => string;
@@ -59,6 +60,7 @@ export function RailAccordion({
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
   reminderSource: TimelineNode[];
+  onReminderSelect?: (r: TimelineNode) => void;
 }) {
   const [open, setOpen] = useState<"approvals" | "reminders">("reminders");
 
@@ -99,7 +101,11 @@ export function RailAccordion({
         onClick={() => setOpen("reminders")}
       />
       {open === "reminders" && (
-        <RemindersBody reminders={reminders} scopeLabel={scopeLabel} />
+        <RemindersBody
+          reminders={reminders}
+          scopeLabel={scopeLabel}
+          onSelect={onReminderSelect}
+        />
       )}
     </section>
   );
@@ -135,13 +141,15 @@ function RailBar({
   );
 }
 
-// Upcoming reminders, soonest first.
+// Upcoming reminders, soonest first. Rows are clickable when onSelect is given.
 function RemindersBody({
   reminders,
   scopeLabel,
+  onSelect,
 }: {
   reminders: TimelineNode[];
   scopeLabel: string;
+  onSelect?: (r: TimelineNode) => void;
 }) {
   if (reminders.length === 0) {
     return (
@@ -150,44 +158,59 @@ function RemindersBody({
       </div>
     );
   }
+  const cls =
+    "flex w-full items-start justify-between gap-3 border-t border-hairline px-5 py-2.5 text-left";
   return (
     <div>
-      {reminders.map((r) => (
-        <div
-          key={r.id}
-          className="flex items-start justify-between gap-3 border-t border-hairline px-5 py-2.5"
-        >
-          <span className="flex min-w-0 items-start gap-2">
-            <span
-              className="mt-1 h-2 w-2 shrink-0 rounded-full"
-              style={{ background: "#a86676" }}
-            />
-            <span className="min-w-0">
-              <span className="block truncate text-[12.5px] text-strong">
-                {r.name}
+      {reminders.map((r) => {
+        const inner = (
+          <>
+            <span className="flex min-w-0 items-start gap-2">
+              <span
+                className="mt-1 h-2 w-2 shrink-0 rounded-full"
+                style={{ background: "#a86676" }}
+              />
+              <span className="min-w-0">
+                <span className="block truncate text-[12.5px] text-strong">
+                  {r.name}
+                </span>
+                {r.function && (
+                  <span className="block truncate font-mono text-[9.5px] uppercase tracking-[0.1em] text-muted-alt">
+                    {funcLabel(r.function)}
+                  </span>
+                )}
+                {r.note && (
+                  <span className="block truncate text-[11px] text-hint">
+                    {r.note}
+                  </span>
+                )}
               </span>
-              {r.function && (
-                <span className="block truncate font-mono text-[9.5px] uppercase tracking-[0.1em] text-muted-alt">
-                  {funcLabel(r.function)}
-                </span>
-              )}
-              {r.note && (
-                <span className="block truncate text-[11px] text-hint">
-                  {r.note}
-                </span>
-              )}
             </span>
-          </span>
-          <span className="shrink-0 text-right">
-            <span className="block font-mono text-[10px] text-muted-alt">
-              {fmtDate(r.time)}
+            <span className="shrink-0 text-right">
+              <span className="block font-mono text-[10px] text-muted-alt">
+                {fmtDate(r.time)}
+              </span>
+              <span className="block font-mono text-[9.5px] text-hint">
+                {daysFromNow(r.time)}
+              </span>
             </span>
-            <span className="block font-mono text-[9.5px] text-hint">
-              {daysFromNow(r.time)}
-            </span>
-          </span>
-        </div>
-      ))}
+          </>
+        );
+        return onSelect ? (
+          <button
+            key={r.id}
+            onClick={() => onSelect(r)}
+            title={`Open ${r.name}`}
+            className={`${cls} cursor-pointer hover:bg-rowhover`}
+          >
+            {inner}
+          </button>
+        ) : (
+          <div key={r.id} className={cls}>
+            {inner}
+          </div>
+        );
+      })}
     </div>
   );
 }
