@@ -314,20 +314,20 @@ export default function FunctionStream() {
       ]}
       status={`${(fn?.name ?? key).toUpperCase()} ACTIVITY`}
     >
-      <div className="flex h-full min-h-0">
-        {/* main */}
-        <div className="flex min-w-0 flex-1 flex-col">
-          {err && (
-            <div className="border-b border-line bg-[#f1e7e3] px-6 py-2 text-[12px] text-[#8a4a3c]">
-              {err}
-            </div>
-          )}
-          {notice && (
-            <div className="border-b border-line bg-[#e8edf1] px-6 py-2 text-[12px] text-[#3c5670]">
-              {notice}
-            </div>
-          )}
+      <div className="flex h-full min-h-0 flex-col">
+        {err && (
+          <div className="border-b border-line bg-[#f1e7e3] px-6 py-2 text-[12px] text-[#8a4a3c]">
+            {err}
+          </div>
+        )}
+        {notice && (
+          <div className="border-b border-line bg-[#e8edf1] px-6 py-2 text-[12px] text-[#3c5670]">
+            {notice}
+          </div>
+        )}
 
+        {/* timeline band across the top, full width (like the main page) */}
+        <div className="shrink-0">
           <div className="flex items-center justify-between px-8 py-4">
             <div className="flex items-center gap-2.5">
               <span className="h-2.5 w-2.5 rounded-full" style={{ background: accent }} />
@@ -358,7 +358,7 @@ export default function FunctionStream() {
             onCancel={() => setAddKind(null)}
           />
 
-          <div className="shrink-0 border-b border-line" style={{ height: 250 }}>
+          <div className="border-b border-line" style={{ height: 250 }}>
             <FunctionTimeline
               nodes={shown}
               accent={accent}
@@ -369,10 +369,11 @@ export default function FunctionStream() {
               onDropKind={onDropKind}
             />
           </div>
+        </div>
 
-          {/* lower area below the timeline: left half = the function's file
-              folder system; right = open file preview / agent answer */}
-          <div className="flex min-h-0 flex-1">
+        {/* content row below the timeline: file system + canvas + right sidebar */}
+        <div className="flex min-h-0 flex-1">
+          <div className="flex min-w-0 flex-1">
             <div className="flex w-[35%] min-w-0 border-r border-line">
               <FunctionFiles
                 variant="fill"
@@ -441,11 +442,9 @@ export default function FunctionStream() {
               )}
             </div>
           </div>
-        </div>
-
-        {/* right sidebar — selected item's detail (else pending approvals),
-            over the agent ask */}
-        <aside className="flex w-[25%] min-w-[300px] flex-col border-l border-line bg-paper-alt">
+          {/* right sidebar — starts below the timeline: selected item's detail
+              (else pending approvals), over the agent ask */}
+          <aside className="flex w-[25%] min-w-[300px] flex-col border-l border-line bg-[#f1f1ef]">
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
             {current ? (
               <DetailPanel
@@ -481,7 +480,8 @@ export default function FunctionStream() {
               No agent assigned to {fn?.name ?? key} yet.
             </div>
           )}
-        </aside>
+          </aside>
+        </div>
       </div>
     </Shell>
   );
