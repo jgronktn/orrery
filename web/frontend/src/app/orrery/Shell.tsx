@@ -20,16 +20,18 @@ export function Shell({
   company,
   crumbs,
   status,
+  toolbar,
   children,
 }: {
   company: string;
   crumbs: Crumb[];
   status?: string;
+  toolbar?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-paper">
-      <Topbar company={company} crumbs={crumbs} status={status} />
+      <Topbar company={company} crumbs={crumbs} status={status} toolbar={toolbar} />
       <div className="min-h-0 flex-1">{children}</div>
     </div>
   );
@@ -39,10 +41,12 @@ function Topbar({
   company,
   crumbs,
   status,
+  toolbar,
 }: {
   company: string;
   crumbs: Crumb[];
   status?: string;
+  toolbar?: ReactNode;
 }) {
   const { user } = useAuth();
   return (
@@ -64,6 +68,9 @@ function Topbar({
           </span>
         </div>
       )}
+
+      {/* right of center — page toolbar (e.g. the timeline composer) */}
+      {toolbar && <div className="hidden md:flex">{toolbar}</div>}
 
       {/* right — avatar */}
       <div className="flex items-center gap-3">

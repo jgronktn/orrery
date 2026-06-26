@@ -38,7 +38,8 @@ export default function FunctionStream() {
   const [approvals, setApprovals] = useState<ProposalRecord[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [showAll, setShowAll] = useState(false);
+  // Timeline shows curated activity (the Show-all toggle's banner was removed).
+  const [showAll] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   // Which canvas-pane accordion section is expanded.
   const [pane, setPane] = useState<"projects" | "conversation">("projects");
@@ -313,6 +314,24 @@ export default function FunctionStream() {
         { label: "FUNCTION", mono: true },
       ]}
       status={`${(fn?.name ?? key).toUpperCase()} ACTIVITY`}
+      toolbar={
+        <Composer
+          compact
+          kind={addKind}
+          title={addTitle}
+          due={addDue}
+          disabled={!streamId}
+          onChoose={(k) => {
+            setAddKind((cur) => (cur === k ? null : k));
+            setAddTitle("");
+            setAddDue("");
+          }}
+          onTitle={setAddTitle}
+          onDue={setAddDue}
+          onSubmit={submitAdd}
+          onCancel={() => setAddKind(null)}
+        />
+      }
     >
       <div className="flex h-full min-h-0 flex-col">
         {err && (
@@ -328,36 +347,6 @@ export default function FunctionStream() {
 
         {/* timeline band across the top, full width (like the main page) */}
         <div className="shrink-0">
-          <div className="flex items-center justify-between px-8 py-4">
-            <div className="flex items-center gap-2.5">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ background: accent }} />
-              <span className="text-[22px] font-semibold text-ink">{fn?.name ?? key}</span>
-              <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-faint">
-                Activity timeline · {shown.length}
-              </span>
-            </div>
-            <label className="flex items-center gap-2 text-[12px] text-muted">
-              <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} />
-              Show all files
-            </label>
-          </div>
-
-          <Composer
-            kind={addKind}
-            title={addTitle}
-            due={addDue}
-            disabled={!streamId}
-            onChoose={(k) => {
-              setAddKind((cur) => (cur === k ? null : k));
-              setAddTitle("");
-              setAddDue("");
-            }}
-            onTitle={setAddTitle}
-            onDue={setAddDue}
-            onSubmit={submitAdd}
-            onCancel={() => setAddKind(null)}
-          />
-
           <div className="border-b border-line" style={{ height: 250 }}>
             <FunctionTimeline
               nodes={shown}

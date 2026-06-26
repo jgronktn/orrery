@@ -24,6 +24,7 @@ export function Composer({
   title,
   due,
   disabled,
+  compact,
   onChoose,
   onTitle,
   onDue,
@@ -34,6 +35,7 @@ export function Composer({
   title: string;
   due: string;
   disabled: boolean;
+  compact?: boolean;
   onChoose: (k: string) => void;
   onTitle: (v: string) => void;
   onDue: (v: string) => void;
@@ -42,7 +44,13 @@ export function Composer({
 }) {
   const active = KINDS.find((k) => k.value === kind) ?? null;
   return (
-    <div className="flex items-center justify-center gap-6 border-b border-line bg-paper-alt px-8 py-2.5">
+    <div
+      className={
+        compact
+          ? "flex items-center gap-2.5"
+          : "flex items-center justify-center gap-6 border-b border-line bg-paper-alt px-8 py-2.5"
+      }
+    >
       {CHIPS.map((k) => {
         const on = kind === k.value;
         return (
@@ -56,17 +64,32 @@ export function Composer({
             }}
             onClick={() => !disabled && onChoose(k.value)}
             disabled={disabled}
-            className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 hover:bg-rowhover disabled:opacity-40"
+            className={
+              compact
+                ? "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 hover:bg-rowhover disabled:opacity-40"
+                : "inline-flex items-center gap-1.5 rounded-lg px-2 py-1 hover:bg-rowhover disabled:opacity-40"
+            }
             style={{
               cursor: disabled ? "default" : "grab",
               background: on ? `${k.color}14` : undefined,
               boxShadow: on ? `inset 0 0 0 1px ${k.color}66` : undefined,
             }}
           >
-            <span style={{ color: k.color }}>
+            <span
+              className={compact ? "[&>svg]:h-[18px] [&>svg]:w-[18px]" : undefined}
+              style={{ color: k.color }}
+            >
               <KindGlyph value={k.value} />
             </span>
-            <span className="text-[12.5px] font-medium text-strong">{k.label}</span>
+            <span
+              className={
+                compact
+                  ? "text-[11px] font-medium text-strong"
+                  : "text-[12.5px] font-medium text-strong"
+              }
+            >
+              {k.label}
+            </span>
           </button>
         );
       })}
@@ -81,21 +104,33 @@ export function Composer({
               if (e.key === "Enter") onSubmit();
               else if (e.key === "Escape") onCancel();
             }}
-            placeholder={`New ${active.label.toLowerCase()}… (Enter to add)`}
-            className="w-72 rounded-lg border border-line-soft bg-white px-3 py-1.5 text-[13px] text-ink outline-none placeholder:text-hint"
+            placeholder={`New ${active.label.toLowerCase()}…`}
+            className={
+              compact
+                ? "w-44 rounded-lg border border-line-soft bg-white px-2 py-1 text-[12px] text-ink outline-none placeholder:text-hint"
+                : "w-72 rounded-lg border border-line-soft bg-white px-3 py-1.5 text-[13px] text-ink outline-none placeholder:text-hint"
+            }
           />
           <input
             type="date"
             value={due}
             onChange={(e) => onDue(e.target.value)}
             title="Date (defaults to today)"
-            className="rounded-lg border border-line-soft bg-white px-2 py-1.5 text-[12.5px] text-strong outline-none"
+            className={
+              compact
+                ? "rounded-lg border border-line-soft bg-white px-1.5 py-1 text-[11.5px] text-strong outline-none"
+                : "rounded-lg border border-line-soft bg-white px-2 py-1.5 text-[12.5px] text-strong outline-none"
+            }
           />
           <button
             onClick={onCancel}
             title="Cancel"
             aria-label="Cancel"
-            className="grid h-8 w-8 place-items-center rounded-full border border-line-soft bg-white text-[13px] text-hint hover:bg-rowhover hover:text-strong"
+            className={
+              compact
+                ? "grid h-7 w-7 place-items-center rounded-full border border-line-soft bg-white text-[12px] text-hint hover:bg-rowhover hover:text-strong"
+                : "grid h-8 w-8 place-items-center rounded-full border border-line-soft bg-white text-[13px] text-hint hover:bg-rowhover hover:text-strong"
+            }
           >
             ✕
           </button>
