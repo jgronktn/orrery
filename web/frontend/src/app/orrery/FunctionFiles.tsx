@@ -140,9 +140,24 @@ export function FunctionFiles({
             setRootDraft("");
             setNewRoot(true);
           }}
-          className="ml-auto shrink-0 whitespace-nowrap rounded border border-line-soft bg-white px-2 py-0.5 font-mono text-[10px] text-strong-alt hover:bg-rowhover"
+          title="New folder"
+          className="ml-auto flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap font-mono text-[10px] text-[#50708a] hover:opacity-75"
         >
-          ＋ New folder
+          <span className="grid h-6 w-6 place-items-center rounded-full border-2 border-[#50708a] bg-transparent">
+            <svg
+              width="11"
+              height="11"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="#50708a"
+              strokeWidth={2.3}
+              strokeLinecap="round"
+              aria-hidden
+            >
+              <path d="M8 2.6v10.8M2.6 8h10.8" />
+            </svg>
+          </span>
+          New folder
         </button>
       </div>
 
