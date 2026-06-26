@@ -37,7 +37,7 @@ litellm_settings:
 
 general_settings:
   # Phase 0 dev: no auth in front of the proxy. The container is only
-  # exposed on localhost via the docker-compose port mapping. When we
-  # move to the noviustec cloud host, add a master key here AND don't
-  # bind 4000 to a public interface.
+  # exposed on localhost via the docker-compose port mapping. If the
+  # gateway is ever published on a public interface, add a master key
+  # here AND don't bind 4000 publicly.
   # master_key: os.environ/LITELLM_MASTER_KEY

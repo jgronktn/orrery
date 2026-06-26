@@ -1,4 +1,4 @@
-# Orrery production stack — orrery.noviustec.com
+# Orrery production stack.
 #
 # Standalone (NOT layered on docker-compose.yml). Differences from the dev stack:
 #   - no --reload, no source/alembic bind mounts (runs the baked image code)
@@ -170,7 +170,7 @@ services:
       ORRERY_QDRANT_URL: "http://qdrant:6333"
       ORRERY_ENV: "prod"
       ORRERY_COOKIE_SECURE: "true"
-      ORRERY_CORS_ORIGINS: '["https://orrery.noviustec.com"]'
+      ORRERY_CORS_ORIGINS: "${ORRERY_CORS_ORIGINS:?set ORRERY_CORS_ORIGINS in .env, e.g. [\"https://your-domain\"]}"
       OTEL_PYTHON_EXCLUDED_URLS: "health"
       HOME: "/tmp"
     # Host-local only: the host nginx proxies /api here. Not public.

@@ -542,7 +542,7 @@ styling + layout only. Done on a branch with a revert tag, then merged to `main`
 
 ## 2026-06-26 — Production deployment to the Droplet (standalone prod compose, host nginx)
 
-Took Orrery live at **https://orrery.noviustec.com** on a resized DigitalOcean
+Took Orrery live in production on a resized DigitalOcean
 Droplet. Chose a **standalone `docker-compose.prod.yml`** (repo root) over
 overriding the dev compose, so prod is self-contained and the dev file stays
 simple: no `--reload`, no source/alembic bind-mounts, baked code only.
@@ -585,9 +585,8 @@ artifacts were staged off-repo (a full data copy — delete after verifying).
 
 ## Where we left off (2026-06-26)
 
-**Orrery is live in production** at **https://orrery.noviustec.com** (Droplet,
-host nginx + certbot, `docker-compose.prod.yml`, as the `orrery` user, dev data
-migrated over). A signed-in user works the orrery map, opens function/project
+**Orrery is live in production** (Droplet, host nginx + certbot,
+`docker-compose.prod.yml`, as the `orrery` user, dev data migrated over). A signed-in user works the orrery map, opens function/project
 pages, chats with an agent (engineering, or the executive assistant at the
 company core), browses files, works the activity timeline, and resolves
 proposals — all on the local filesystem document store.
@@ -623,8 +622,8 @@ What's built and verified:
   research-log tools any agent inherits.
 - **Observability** — Logfire/OpenTelemetry tracing of the backend + both agents,
   `request_id`-correlated end to end (inert until `LOGFIRE_TOKEN` is set).
-- **Deployed** — production at `orrery.noviustec.com` via `docker-compose.prod.yml`
-  behind host nginx + certbot, as the `orrery` user; see `docs/deploy.md`.
+- **Deployed** — running in production via `docker-compose.prod.yml` behind host
+  nginx + certbot, as the `orrery` user; see `docs/deploy.md`.
 
 Run it: `make up` (backend stack) + `npm run dev` (frontend). CLI:
 `make ask|chat|draft|save-spec`, plus KB tools. Everything is committed and

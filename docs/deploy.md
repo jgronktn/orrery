@@ -1,4 +1,6 @@
-# Deploying Orrery to the Droplet (orrery.noviustec.com)
+# Deploying Orrery to the Droplet
+
+> Replace `<your-domain>` throughout with the host you serve Orrery from.
 
 Production runs the same stack as dev but via **`docker-compose.prod.yml`** (standalone):
 no `--reload`, no source bind mounts, only the backend published (host-local on
@@ -49,6 +51,7 @@ ORRERY_SESSION_SECRET=<generated>
 POSTGRES_PASSWORD=<generated>
 ORRERY_UID=<id -u orrery>
 ORRERY_GID=<id -g orrery>
+ORRERY_CORS_ORIGINS=["https://<your-domain>"]
 
 # optional (leave blank to disable)
 LOGFIRE_TOKEN=
@@ -83,10 +86,11 @@ docker compose -f docker-compose.prod.yml ps             # all services healthy
 
 ```bash
 sudo apt install -y certbot python3-certbot-nginx        # if not already present
-sudo cp infra/nginx/orrery.noviustec.com.conf /etc/nginx/sites-available/
-sudo ln -s /etc/nginx/sites-available/orrery.noviustec.com.conf /etc/nginx/sites-enabled/
+sudo cp infra/nginx/orrery.conf /etc/nginx/sites-available/
+# edit /etc/nginx/sites-available/orrery.conf — set server_name to <your-domain>
+sudo ln -s /etc/nginx/sites-available/orrery.conf /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
-sudo certbot --nginx -d orrery.noviustec.com             # adds 443 + 80->443 redirect
+sudo certbot --nginx -d <your-domain>                    # adds 443 + 80->443 redirect
 ```
 
 ## Firewall
@@ -98,11 +102,11 @@ are not reachable from the internet regardless.
 ## First user
 
 The prod database starts empty. Register the first account at
-`https://orrery.noviustec.com`.
+`https://<your-domain>`.
 
 ## Verify
 
-1. `curl -I https://orrery.noviustec.com` → `200`, valid Let's Encrypt cert, 80→443 redirect.
+1. `curl -I https://<your-domain>` → `200`, valid Let's Encrypt cert, 80→443 redirect.
 2. From the public internet, `nc -vz <droplet> 4000` (and 8000/5432/6333/8001/8002) → refused.
 3. Register + log in; the session cookie is `Secure`+`HttpOnly`.
 4. Upload a file >1 MB in a project → lands in `/var/lib/orrery/files/...`, git-committed;
