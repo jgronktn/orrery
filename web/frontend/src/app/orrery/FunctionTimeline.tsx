@@ -476,7 +476,7 @@ export function FunctionTimeline({
           onClick={today}
           className="flex items-center gap-1.5 font-mono text-[10px] text-[#50708a] hover:opacity-75"
         >
-          <span className="grid h-7 w-7 place-items-center rounded-full border border-[#50708a] bg-transparent text-[12px] leading-none">
+          <span className="grid h-7 w-7 place-items-center rounded-full border-2 border-[#50708a] bg-transparent text-[12px] leading-none">
             ●
           </span>
           TODAY
@@ -485,7 +485,7 @@ export function FunctionTimeline({
           onClick={() => home()}
           className="flex items-center gap-1.5 font-mono text-[10px] text-[#50708a] hover:opacity-75"
         >
-          <span className="grid h-7 w-7 place-items-center rounded-full border border-[#50708a] bg-transparent text-[13px] leading-none">
+          <span className="grid h-7 w-7 place-items-center rounded-full border-2 border-[#50708a] bg-transparent text-[13px] leading-none">
             ↺
           </span>
           RESET
@@ -513,7 +513,7 @@ function ZoomBtn({
   return (
     <button
       onClick={onClick}
-      className="grid h-7 w-7 place-items-center rounded-full border border-[#50708a] bg-transparent text-[15px] text-[#50708a] hover:bg-[#50708a14]"
+      className="grid h-7 w-7 place-items-center rounded-full border-2 border-[#50708a] bg-transparent text-[15px] text-[#50708a] hover:bg-[#50708a14]"
     >
       {children}
     </button>
