@@ -141,7 +141,7 @@ export function FunctionFiles({
             setNewRoot(true);
           }}
           title="New folder"
-          className="ml-auto flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap font-mono text-[10px] text-[#50708a] hover:opacity-75"
+          className="ml-auto flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap font-mono text-[10px] uppercase text-[#50708a] hover:opacity-75"
         >
           <span className="grid h-6 w-6 place-items-center rounded-full border-2 border-[#50708a] bg-transparent">
             <svg
