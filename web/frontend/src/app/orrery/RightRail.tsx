@@ -332,16 +332,20 @@ export function AskBar({
     }
   };
   return (
-    <div className="border-t border-line bg-paper px-4 pb-[31px] pt-[31px]">
-      <div className="mb-2 flex items-center gap-2">
-        <span className="grid h-7 w-7 place-items-center rounded-full bg-ink text-[12px] font-semibold text-[#f6f4ef]">
+    <div className="flex flex-col border-t border-line bg-[#f1f1ef]">
+      {/* header bar — same treatment as the Pending approvals / Reminders bars */}
+      <div className="flex h-[50px] shrink-0 items-center gap-2 border-b border-[#f8f8f6] bg-[#e8e8e4] px-5">
+        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-ink text-[11px] font-semibold text-[#f6f4ef]">
           {agentName.slice(0, 1)}
         </span>
-        <span className="text-[13px] font-semibold text-ink">{agentName}</span>
-        <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-hint">
+        <span className="text-[13px] font-semibold uppercase tracking-[0.08em] text-muted">
+          {agentName}
+        </span>
+        <span className="ml-auto truncate font-mono text-[10px] uppercase tracking-[0.08em] text-hint">
           {scopeLabel}
         </span>
       </div>
+      <div className="px-4 pb-[31px] pt-3">
       {onReopen && reopenCount ? (
         <button
           onClick={onReopen}
@@ -383,6 +387,7 @@ export function AskBar({
         >
           {busy ? "…" : "↑"}
         </button>
+      </div>
       </div>
     </div>
   );
