@@ -312,7 +312,11 @@ export function Conversation({
           <div className="text-[13px] font-semibold uppercase tracking-[0.08em] text-muted">
             {agentName} · conversation
           </div>
-          <button onClick={onClose} className="shrink-0 font-mono text-[12px] text-hint hover:text-strong">
+          <button
+            onClick={onClose}
+            className="grid h-[25px] w-[25px] shrink-0 cursor-pointer place-items-center rounded-full border bg-transparent text-[14px] leading-none text-ink/55 hover:text-[#8a4a3c]"
+            style={{ borderColor: `${accent}80` }}
+          >
             ✕
           </button>
         </div>
