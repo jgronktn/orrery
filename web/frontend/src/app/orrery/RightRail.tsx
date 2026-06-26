@@ -370,7 +370,7 @@ export function AskBar({
             title={reopenCount ? "View conversation" : "Open chat"}
             className="ml-auto flex shrink-0 cursor-pointer items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.08em] text-[#50708a] hover:opacity-75"
           >
-            <span className="grid h-6 min-w-6 place-items-center rounded-full border-2 border-[#50708a] bg-transparent px-1.5 leading-none tracking-normal">
+            <span className="grid h-6 min-w-6 place-items-center rounded-full border-2 border-[#50708a] bg-transparent px-1.5 font-bold leading-none tracking-normal">
               {reopenCount || "✦"}
             </span>
             {reopenCount ? "view" : "open chat"}
