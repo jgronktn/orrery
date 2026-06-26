@@ -1,0 +1,214 @@
+# Orrery production stack — orrery.noviustec.com
+#
+# Standalone (NOT layered on docker-compose.yml). Differences from the dev stack:
+#   - no --reload, no source/alembic bind mounts (runs the baked image code)
+#   - only the backend publishes a host port, localhost-only (127.0.0.1:8000) for
+#     the host nginx; gateway/qdrant/postgres/agents are in-network only
+#   - runs as the orrery user (ORRERY_UID/ORRERY_GID from .env)
+#   - prod env: ORRERY_ENV=prod, secure cookies, real CORS origin, strong
+#     Postgres password + session secret (from .env)
+#
+# Deploy (as the orrery user, in the repo):
+#   docker compose -f docker-compose.prod.yml build
+#   docker compose -f docker-compose.prod.yml --profile build run --rm frontend-builder
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# See docs/deploy.md for the full runbook.
+
+name: orrery
+
+# Run containers as the orrery system user so files in the bind mounts are
+# owned by orrery. Set ORRERY_UID/ORRERY_GID in .env from `id -u/-g orrery`.
+x-prod-user: &prod-user "${ORRERY_UID:-1000}:${ORRERY_GID:-1000}"
+
+x-engineering-env: &engineering-env
+  ORRERY_GATEWAY_URL: "http://gateway:4000/v1"
+  ORRERY_MODEL: "claude-sonnet"
+  ORRERY_QDRANT_URL: "http://qdrant:6333"
+  ORRERY_EMBED_MODEL: "BAAI/bge-small-en-v1.5"
+  ORRERY_GOOGLE_SA_JSON: "/app/secrets/service-account.json"
+  ORRERY_ENG_DRIVE_FOLDER_ID: "${ORRERY_ENG_DRIVE_FOLDER_ID:-}"
+  ORRERY_ENG_DRAFTS_FOLDER_ID: "${ORRERY_ENG_DRAFTS_FOLDER_ID:-}"
+  ORRERY_FILES_ROOT: "/var/lib/orrery/files"
+  OTEL_PYTHON_EXCLUDED_URLS: "health"
+
+x-corporate-env: &corporate-env
+  ORRERY_GATEWAY_URL: "http://gateway:4000/v1"
+  ORRERY_MODEL: "claude-sonnet"
+  ORRERY_QDRANT_URL: "http://qdrant:6333"
+  ORRERY_EMBED_MODEL: "BAAI/bge-small-en-v1.5"
+  ORRERY_FILES_ROOT: "/var/lib/orrery/files"
+  OTEL_PYTHON_EXCLUDED_URLS: "health"
+
+services:
+  gateway:
+    image: ghcr.io/berriai/litellm:main-stable
+    container_name: orrery-gateway
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./gateway/config.yaml:/app/config.yaml:ro
+    command: ["--config", "/app/config.yaml", "--port", "4000", "--num_workers", "1"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; urllib.request.urlopen('http://localhost:4000/health/liveliness', timeout=3).read(); sys.exit(0)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    container_name: orrery-qdrant
+    restart: unless-stopped
+    volumes:
+      - qdrant-data:/qdrant/storage
+    healthcheck:
+      test:
+        - "CMD"
+        - "bash"
+        - "-c"
+        - "exec 3<>/dev/tcp/localhost/6333 && printf 'GET /healthz HTTP/1.0\\r\\n\\r\\n' >&3 && head -1 <&3 | grep -q 200"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  engineering:
+    build:
+      context: ./agents
+      dockerfile: engineering/Dockerfile
+    image: orrery-engineering:latest
+    container_name: orrery-engineering
+    restart: unless-stopped
+    user: *prod-user
+    env_file:
+      - .env
+    environment: *engineering-env
+    volumes:
+      - ./config:/app/config:ro
+      - ./docs:/app/docs:ro
+      - ./service-account.json:/app/secrets/service-account.json:ro
+      - /var/lib/orrery/files:/var/lib/orrery/files:rw
+      - ./logs:/app/logs
+    entrypoint: ["uvicorn"]
+    command: ["orrery_engineering.server:app", "--host", "0.0.0.0", "--port", "8001"]
+    depends_on:
+      gateway:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; urllib.request.urlopen('http://localhost:8001/health', timeout=3).read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  corporate:
+    build:
+      context: ./agents
+      dockerfile: corporate/Dockerfile
+    image: orrery-corporate:latest
+    container_name: orrery-corporate
+    restart: unless-stopped
+    user: *prod-user
+    env_file:
+      - .env
+    environment: *corporate-env
+    volumes:
+      - ./config:/app/config:ro
+      - /var/lib/orrery/files:/var/lib/orrery/files:rw
+      - ./logs:/app/logs
+    entrypoint: ["uvicorn"]
+    command: ["orrery_corporate.server:app", "--host", "0.0.0.0", "--port", "8002"]
+    depends_on:
+      gateway:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; urllib.request.urlopen('http://localhost:8002/health', timeout=3).read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  postgres:
+    image: postgres:16
+    container_name: orrery-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: orrery
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}"
+      POSTGRES_DB: orrery
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orrery -d orrery"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  backend:
+    build:
+      context: .
+      dockerfile: web/backend/Dockerfile
+    image: orrery-backend:latest
+    container_name: orrery-backend
+    restart: unless-stopped
+    user: *prod-user
+    env_file:
+      - .env
+    environment:
+      ORRERY_DATABASE_URL: "postgresql+psycopg://orrery:${POSTGRES_PASSWORD}@postgres:5432/orrery"
+      ORRERY_ENGINEERING_AGENT_URL: "http://engineering:8001"
+      ORRERY_CORPORATE_AGENT_URL: "http://corporate:8002"
+      ORRERY_SESSION_SECRET: "${ORRERY_SESSION_SECRET:?set ORRERY_SESSION_SECRET in .env}"
+      ORRERY_FILES_ROOT: "/var/lib/orrery/files"
+      ORRERY_QDRANT_URL: "http://qdrant:6333"
+      ORRERY_ENV: "prod"
+      ORRERY_COOKIE_SECURE: "true"
+      ORRERY_CORS_ORIGINS: '["https://orrery.noviustec.com"]'
+      OTEL_PYTHON_EXCLUDED_URLS: "health"
+      HOME: "/tmp"
+    # Host-local only: the host nginx proxies /api here. Not public.
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - /var/lib/orrery/files:/var/lib/orrery/files:rw
+    # No --reload; run migrations then the server from the baked image.
+    command: ["sh", "-c", "alembic upgrade head && uvicorn orrery_backend.main:app --host 0.0.0.0 --port 8000"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      engineering:
+        condition: service_healthy
+      corporate:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; urllib.request.urlopen('http://localhost:8000/health', timeout=3).read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+  # One-shot builder: compiles the frontend and publishes dist/ to the host dir
+  # the nginx server block serves (/srv/orrery/frontend). Not started by `up`.
+  #   docker compose -f docker-compose.prod.yml --profile build run --rm frontend-builder
+  frontend-builder:
+    image: node:20-slim
+    working_dir: /app
+    volumes:
+      - ./web/frontend:/app
+      - /srv/orrery/frontend:/out
+    command: ["sh", "-c", "npm install && npm run build && rm -rf /out/* && cp -r dist/. /out/"]
+    profiles:
+      - build
+
+volumes:
+  qdrant-data:
+  postgres-data:
