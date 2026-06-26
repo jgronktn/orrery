@@ -474,18 +474,18 @@ export function FunctionTimeline({
         <ZoomBtn onClick={() => setPpm(clamp(pxPerMs / 1.6, minPpm, dayPpm))}>−</ZoomBtn>
         <button
           onClick={today}
-          className="flex items-center gap-1.5 font-mono text-[10px] text-[#50708a] hover:opacity-75"
+          className="flex cursor-pointer items-center gap-1.5 font-mono text-[10px] text-[#50708a] hover:opacity-75"
         >
-          <span className="grid h-7 w-7 place-items-center rounded-full border-2 border-[#50708a] bg-transparent text-[12px] leading-none">
-            ●
+          <span className="grid h-7 w-7 place-items-center rounded-full border-2 border-[#50708a] bg-transparent">
+            <span className="h-2 w-2 rounded-full bg-[#50708a]" />
           </span>
           TODAY
         </button>
         <button
           onClick={() => home()}
-          className="flex items-center gap-1.5 font-mono text-[10px] text-[#50708a] hover:opacity-75"
+          className="flex cursor-pointer items-center gap-1.5 font-mono text-[10px] text-[#50708a] hover:opacity-75"
         >
-          <span className="grid h-7 w-7 place-items-center rounded-full border-2 border-[#50708a] bg-transparent text-[13px] leading-none">
+          <span className="grid h-7 w-7 place-items-center rounded-full border-2 border-[#50708a] bg-transparent text-[17px] leading-none">
             ↺
           </span>
           RESET
@@ -513,7 +513,7 @@ function ZoomBtn({
   return (
     <button
       onClick={onClick}
-      className="grid h-7 w-7 place-items-center rounded-full border-2 border-[#50708a] bg-transparent text-[15px] text-[#50708a] hover:bg-[#50708a14]"
+      className="grid h-7 w-7 cursor-pointer place-items-center rounded-full border-2 border-[#50708a] bg-transparent text-[15px] text-[#50708a] hover:bg-[#50708a14]"
     >
       {children}
     </button>
