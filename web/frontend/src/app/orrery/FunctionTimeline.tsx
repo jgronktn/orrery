@@ -485,8 +485,21 @@ export function FunctionTimeline({
           onClick={() => home()}
           className="flex cursor-pointer items-center gap-1.5 font-mono text-[10px] text-[#50708a] hover:opacity-75"
         >
-          <span className="grid h-7 w-7 place-items-center rounded-full border-2 border-[#50708a] bg-transparent text-[17px] leading-none">
-            ↺
+          <span className="grid h-7 w-7 place-items-center rounded-full border-2 border-[#50708a] bg-transparent">
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#50708a"
+              strokeWidth={2.4}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+              <path d="M3 3v5h5" />
+            </svg>
           </span>
           RESET
         </button>
