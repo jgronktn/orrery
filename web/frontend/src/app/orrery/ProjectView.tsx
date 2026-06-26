@@ -39,7 +39,8 @@ export default function ProjectView() {
   const [approvals, setApprovals] = useState<ProposalRecord[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [showAll, setShowAll] = useState(false);
+  // Timeline shows curated activity (the Show-all toggle's banner was removed).
+  const [showAll] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [pending, setPending] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -280,54 +281,40 @@ export default function ProjectView() {
         { label: "PROJECT", mono: true },
       ]}
       status={`${(project?.name ?? "PROJECT").toUpperCase()}`}
+      toolbar={
+        <Composer
+          compact
+          kind={addKind}
+          title={addTitle}
+          due={addDue}
+          disabled={!project}
+          onChoose={(k) => {
+            setAddKind((cur) => (cur === k ? null : k));
+            setAddTitle("");
+            setAddDue("");
+          }}
+          onTitle={setAddTitle}
+          onDue={setAddDue}
+          onSubmit={submitAdd}
+          onCancel={() => setAddKind(null)}
+        />
+      }
     >
-      <div className="flex h-full min-h-0">
-        {/* main */}
-        <div className="flex min-w-0 flex-1 flex-col">
-          {err && (
-            <div className="border-b border-line bg-[#f1e7e3] px-6 py-2 text-[12px] text-[#8a4a3c]">
-              {err}
-            </div>
-          )}
-          {notice && (
-            <div className="border-b border-line bg-[#e8edf1] px-6 py-2 text-[12px] text-[#3c5670]">
-              {notice}
-            </div>
-          )}
-
-          <div className="flex items-center justify-between px-8 py-4">
-            <div className="flex min-w-0 items-center gap-2.5">
-              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: accent }} />
-              <span className="truncate text-[22px] font-semibold text-ink">
-                {project?.name ?? "Project"}
-              </span>
-              <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-faint">
-                Project · {shown.length}
-              </span>
-            </div>
-            <label className="flex items-center gap-2 text-[12px] text-muted">
-              <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} />
-              Show all files
-            </label>
+      <div className="flex h-full min-h-0 flex-col">
+        {err && (
+          <div className="border-b border-line bg-[#f1e7e3] px-6 py-2 text-[12px] text-[#8a4a3c]">
+            {err}
           </div>
+        )}
+        {notice && (
+          <div className="border-b border-line bg-[#e8edf1] px-6 py-2 text-[12px] text-[#3c5670]">
+            {notice}
+          </div>
+        )}
 
-          <Composer
-            kind={addKind}
-            title={addTitle}
-            due={addDue}
-            disabled={!project}
-            onChoose={(k) => {
-              setAddKind((cur) => (cur === k ? null : k));
-              setAddTitle("");
-              setAddDue("");
-            }}
-            onTitle={setAddTitle}
-            onDue={setAddDue}
-            onSubmit={submitAdd}
-            onCancel={() => setAddKind(null)}
-          />
-
-          <div className="shrink-0 border-b border-line" style={{ height: 250 }}>
+        {/* timeline band across the top, full width (like the main page) */}
+        <div className="shrink-0">
+          <div className="border-b border-line" style={{ height: 250 }}>
             <FunctionTimeline
               nodes={shown}
               accent={accent}
@@ -338,10 +325,11 @@ export default function ProjectView() {
               onDropKind={onDropKind}
             />
           </div>
+        </div>
 
-          {/* below the timeline — left half = project file system; right =
-              open file preview / agent answer (rest built next) */}
-          <div className="flex min-h-0 flex-1">
+        {/* content row below the timeline: file system + canvas + right sidebar */}
+        <div className="flex min-h-0 flex-1">
+          <div className="flex min-w-0 flex-1">
             <div className="flex w-[35%] min-w-0 border-r border-line">
               {project && (
                 <FunctionFiles
@@ -403,10 +391,9 @@ export default function ProjectView() {
               )}
             </div>
           </div>
-        </div>
-
-        {/* right sidebar — open items (or selected detail) over the agent ask */}
-        <aside className="flex w-[25%] min-w-[300px] flex-col border-l border-line bg-paper-alt">
+          {/* right sidebar — starts below the timeline: open items (or selected
+              detail) over the agent ask */}
+          <aside className="flex w-[25%] min-w-[300px] flex-col border-l border-line bg-[#f1f1ef]">
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
             {current ? (
               <DetailPanel
@@ -434,7 +421,8 @@ export default function ProjectView() {
             onAsk={(p) => void onAsk(p)}
             busy={busy}
           />
-        </aside>
+          </aside>
+        </div>
       </div>
     </Shell>
   );
