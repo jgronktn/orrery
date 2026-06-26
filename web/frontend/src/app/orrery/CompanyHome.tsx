@@ -347,6 +347,24 @@ export default function CompanyHome() {
   const rail = (
     <aside className="flex w-[520px] shrink-0 flex-col border-l border-line bg-[#f1f1ef]">
       <div className="flex-1 overflow-y-auto">
+        {selFn && (
+          <button
+            onClick={() => navigate(`/fn/${selFn.key}`)}
+            title={`Open the ${selFn.name} page`}
+            className="flex h-[50px] w-full shrink-0 cursor-pointer items-center justify-between gap-2 border-b border-[#f8f8f6] px-5 text-left transition hover:brightness-95"
+            style={{ background: `${accentOf(selFn.key)}26` }}
+          >
+            <span
+              className="text-[13px] font-semibold uppercase tracking-[0.08em]"
+              style={{ color: accentOf(selFn.key) }}
+            >
+              {selFn.name}
+            </span>
+            <span aria-hidden style={{ color: accentOf(selFn.key) }}>
+              →
+            </span>
+          </button>
+        )}
         <RailAccordion
           approvals={approvals}
           funcOf={funcOf}
