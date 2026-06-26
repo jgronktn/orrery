@@ -203,11 +203,6 @@ Run `make` with no args to see all targets.
 - **Observability** — Logfire/OpenTelemetry tracing of agent runs and requests,
   `request_id`-correlated end to end (inert without a token).
 
-**Deployed:** live in production at **https://orrery.noviustec.com** on a
-DigitalOcean Droplet — `docker-compose.prod.yml` behind the box's host nginx +
-certbot TLS, running as the dedicated `orrery` user, with the dev data migrated
-over. See `docs/deploy.md` for the runbook.
-
 **Next:** Gmail/email integration (inbox view, thread→project assignment,
 outbound drafts); cross-agent querying for the EA + role-gating; real Postmark.
 See `docs/decisions.md` for the decision log and `CLAUDE.md` for the full plan.
