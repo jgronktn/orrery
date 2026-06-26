@@ -27,7 +27,7 @@ Three ideas shape everything:
 
 - **Inward** — reads the company's engineering documents in the **local file
   store** (specs, SOWs, design docs, testing checklists, certifications),
-  browses folders, reads documents (Markdown/Word/ODT/PDF-by-pointer and parsed
+  browses folders, reads documents (Markdown/Word/ODT, PDF text, and parsed
   `.eml` emails), answers with citations, and drafts new documents from
   templates into a `drafts/` folder (never overwriting originals).
 - **Outward** — researches parts and vendor options via one controlled
@@ -64,9 +64,10 @@ upcoming Gmail integration.)
     └── drafts/ engineering/ marketing/ manufacturing/ decisions/
 ```
 
-Agent read tools search filenames + text content (PDFs by filename only — not
-extracted). Writes are bounded: function zones (`engineering/drafts`) for
-non-project work, and per-project folders gated by project membership.
+Agent read tools search filenames + extracted text content (PDF text is pulled
+via `pdfplumber`; scanned/image-only PDFs fall back to the filename). Writes are
+bounded: function zones (`engineering/drafts`) for non-project work, and
+per-project folders gated by project membership.
 
 ## Architecture
 
@@ -102,6 +103,9 @@ schema change.
   research log only through the backend's `/internal/agent` API, authed by a
   short-lived callback token; the backend enforces which agents are engaged on
   the project.
+- **Observability** — agent loops, tool calls, tokens, and latency export to
+  **Pydantic Logfire** (OpenTelemetry under the hood), `request_id`-correlated
+  across backend↔agent. Inert until `LOGFIRE_TOKEN` is set.
 
 ## Repository layout (monorepo)
 
@@ -121,8 +125,10 @@ config/
   engineering/agent.md    # each agent's behavior (git-tracked, human-edited)
   corporate/agent.md
 gateway/                  # LiteLLM model routing
-docs/                     # architecture + decisions log
+infra/nginx/              # host nginx server block (production)
+docs/                     # architecture, decisions log, deploy runbook
 docker-compose.yml        # local dev stack
+docker-compose.prod.yml   # production stack (Droplet, behind host nginx)
 Makefile                  # ergonomic targets
 ```
 
@@ -192,9 +198,16 @@ Run `make` with no args to see all targets.
 - **Cross-functional projects** — multi-agent schema, per-project folder trees +
   sectioned research logs, shared task + research-log tools.
 - **Document store** — local filesystem with git versioning; rich cataloging
-  (text extraction, keyword + vector search, email From/To/attachments).
+  (text extraction incl. PDF text, keyword + vector search, email
+  From/To/attachments).
+- **Observability** — Logfire/OpenTelemetry tracing of agent runs and requests,
+  `request_id`-correlated end to end (inert without a token).
+
+**Deployed:** live in production at **https://orrery.noviustec.com** on a
+DigitalOcean Droplet — `docker-compose.prod.yml` behind the box's host nginx +
+certbot TLS, running as the dedicated `orrery` user, with the dev data migrated
+over. See `docs/deploy.md` for the runbook.
 
 **Next:** Gmail/email integration (inbox view, thread→project assignment,
-outbound drafts); cross-agent querying for the EA + role-gating; real Postmark;
-and deployment to a DigitalOcean Droplet. See `docs/decisions.md` for the
-decision log and `CLAUDE.md` for the full plan.
+outbound drafts); cross-agent querying for the EA + role-gating; real Postmark.
+See `docs/decisions.md` for the decision log and `CLAUDE.md` for the full plan.

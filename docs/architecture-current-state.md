@@ -1,6 +1,6 @@
 # Orrery — Current Architecture (as-built)
 
-_Generated 2026-06-22, refreshed 2026-06-24, from a read of the actual code. Describes what exists today, not the long-term design. Inconsistencies and half-built seams are flagged in the last section._
+_Generated 2026-06-22, refreshed 2026-06-26, from a read of the actual code. Describes what exists today, not the long-term design. Inconsistencies and half-built seams are flagged in the last section._
 
 ## Overview
 
@@ -45,6 +45,10 @@ flowchart LR
 ```
 
 **Docker services** (`docker-compose.yml`): `gateway` (LiteLLM), `qdrant`, `engineering` (agent HTTP :8001), `corporate` (executive-assistant HTTP :8002), `postgres:16`, `backend` (:8000), and an `agent` CLI profile (same image as `engineering`). All long-running services use `restart: unless-stopped`, so they recover after a host/Docker reboot. The frontend dev server (Vite :5173) runs outside compose and proxies `/api` to the backend. `backend`, `engineering`, and `corporate` all bind-mount `/var/lib/orrery/files` read-write; Qdrant and Postgres use named volumes.
+
+**Production deployment** (`docker-compose.prod.yml`, repo root). Orrery is live at **https://orrery.noviustec.com** on a DigitalOcean Droplet. Prod runs the same images but standalone: no `--reload`, no source/alembic bind-mounts, and **only the backend publishes a port — host-local on `127.0.0.1:8000`** for the box's **host nginx** (gateway/qdrant/postgres/agents are unpublished, reachable only on the Docker network). Nginx terminates TLS (**certbot**), serves the built SPA from `/srv/orrery/frontend`, and proxies `/api` + `/openapi.json` to the backend. A `frontend-builder` compose service (profile `build`, `node:20-slim`) builds `dist/` into that static dir; there is no serving container. All containers run as the dedicated non-root **`orrery`** user (`ORRERY_UID:ORRERY_GID`). Prod-only env comes from the Droplet `.env`: `ORRERY_ENV=prod`, `ORRERY_COOKIE_SECURE=true`, `ORRERY_CORS_ORIGINS=["https://orrery.noviustec.com"]`, an in-compose Postgres password, and a strong session secret. Migrations run on backend start (`alembic upgrade head`). The dev data (one user, projects, catalog, KB) was migrated over (pg dump + file-store tar + Qdrant volume). Full runbook: `docs/deploy.md`.
+
+**Observability.** Backend and agents are instrumented with **Pydantic Logfire** (OpenTelemetry — FastAPI, HTTPX, and the PydanticAI agent loop), exporting traces/spans plus token/cost/latency, with a `request_id` propagated backend→agent for end-to-end correlation (live project `ppi-orrery`). Instrumentation is always wired but **inert** (`send_to_logfire="if-token-present"`) until `LOGFIRE_TOKEN` is set. Note: FastAPI is pinned `<0.137` because otel-fastapi `0.56b0` crashes on its newer `_IncludedRouter` internal.
 
 ---
 
@@ -213,7 +217,7 @@ Sensitive destinations (`corporate/equity/`, `corporate/financial/debt/`) and `s
 Each agent is a FastAPI service exposing `GET /health`, `POST /run` (`AgentRequest → AgentResponse`), and `POST /execute` (bounded write after approval). It's a **PydanticAI** loop whose model is built by `orrery_lib.gateway` against the LiteLLM gateway. Behavior lives in `config/<function>/agent.md` (loaded at startup).
 
 **Engineering agent** (`agents/engineering`, :8001). **Tools** (`.../agent.py` + `orrery_lib/pm.py`):
-- Read-only: `search_files`, `list_directory`, `read_file` (Markdown/Word/ODT plus parsed `.eml`; PDFs by pointer), `search_docs` (Qdrant `documents`), `search_kb` (Qdrant `learnings`), `add_kb` (proposal-queue only), `web_search` (Exa). Its `FileStoreReader` is scoped to the engineering corpus, plus the current project's folder when a project `callback`/context is present (`build_reader`).
+- Read-only: `search_files`, `list_directory`, `read_file` (Markdown/Word/ODT, PDF text via `pdfplumber`, plus parsed `.eml`; scanned/image-only PDFs degrade to a filename pointer), `search_docs` (Qdrant `documents`), `search_kb` (Qdrant `learnings`), `add_kb` (proposal-queue only), `web_search` (Exa). Its `FileStoreReader` is scoped to the engineering corpus, plus the current project's folder when a project `callback`/context is present (`build_reader`).
 - Proposal-only writes: `request_spec_save` (stages a URL; no I/O) and draft creation. The agent never writes the file store directly during reasoning.
 - Project-scoped (only when a `callback` is present): `list/create/update task`, `link_task_to_doc`, `read/append research-log` — all HTTP calls back into `/internal/agent/*`.
 
@@ -257,18 +261,22 @@ flowchart TB
   home --> ffiles["FunctionFiles (filesystem panel)"]
   home --> fview["FileViewer"]
   home --> vault["LoginVault (IT credential vault)"]
-  home --> rail["RightRail: TimelinePanel · ApprovalsPanel · AskBar"]
-  fn --> ftl["FunctionTimeline"]
+  home --> ftlband["FunctionTimeline (full-width top band)"]
+  home --> rail["RightRail: RailAccordion (approvals · reminders) · AskBar"]
+  fn --> ftl["FunctionTimeline (full-width top band)"]
   fn --> conv["Conversation (accordion) · CanvasAccordion"]
   fn --> rail
-  map --> ftlmini["FunctionTimeline (compact, in rail)"]
 
   client["api/client.ts (typed fetch)"] --> types["api/types.ts (generated from OpenAPI)"]
   home --> client
   fn --> client
 ```
 
-The live UI is the warm-paper set under `src/app/orrery/` (`Shell`, `CompanyHome`, `OrreryMap`, `FunctionFiles`, `FileViewer`, `FunctionStream`, `FunctionTimeline`, `RightRail`, `ProjectView`, `LoginVault`, `timelineSurface` (Composer · Conversation · CanvasAccordion · DetailPanel · TypeGlyph), plus `theme/time/timelineScale`). `api/client.ts` is a thin typed fetch layer over `api/types.ts`, generated from the backend's OpenAPI (`npm run gen:types`). Routes: `/` = Company Home (orrery map + file panel + right rail; the EA answers at the core; selecting IT opens the credential vault), `/fn/:key` = Function page (250px timeline + composer; lower canvas is a left file tree + a right **Projects/Conversation accordion**; 25% approvals/ask sidebar), `/project/:id` = Project page (timeline + composer; file tree + a **Conversation** pane; open-items/ask sidebar). Timeline tags carry a colored type strip + icon, place emails above/below the axis by direction with "To"/"From", and show a days-from-now chip on hover; selecting a file/email highlights + reveals it in the file tree.
+The live UI is the **greige + steel** set under `src/app/orrery/` (`Shell`, `CompanyHome`, `OrreryMap`, `FunctionFiles`, `FileViewer`, `FunctionStream`, `FunctionTimeline`, `RightRail`, `ProjectView`, `LoginVault`, `timelineSurface` (Composer · Conversation · CanvasAccordion · DetailPanel · TypeGlyph), plus `theme/time/timelineScale`). The palette (defined as Tailwind v4 `@theme` tokens in `index.css`) is a near-white/cream surface set with warm-dark ink and a single steel chromatic accent (`--color-steel: #50708a`); the per-function accents that drive the OrreryMap are unchanged. Fonts are **Space Grotesk** (sans — headings, labels, numbers) and **Space Mono** (uppercase eyebrows, dates, counts), loaded from Google Fonts. `api/client.ts` is a thin typed fetch layer over `api/types.ts`, generated from the backend's OpenAPI (`npm run gen:types`).
+
+**Shared layout (all three routes), after the 2026-06 redesign:** a **full-width timeline band across the top** of the window, the **composer moved into the top header** (compact, right of center), and a content row below it of **file system (≈35%) · canvas · right rail**. The right rail is a **RailAccordion** — *Pending approvals* + *Reminders* (reminders default-open, upcoming-only) — over an **AskBar**; on the company page each reminder shows its owning function as subtext and deep-links to that function (`/fn/:key?node=…`). Timeline zoom / today / reset, the file panel's new-folder button, and the canvas view toggle are rendered as steel circle-stroke controls with uppercase mono labels.
+
+Routes: `/` = Company Home (orrery map with a center→edge gradient background + file panel + right rail; the EA answers at the core; selecting a function reveals its file panel and a **clickable breadcrumb** back to the map; selecting IT opens the credential vault), `/fn/:key` = Function page (timeline band + file tree + a **Projects/Conversation accordion** canvas + approvals/ask rail), `/project/:id` = Project page (timeline band + file tree + a **Conversation** canvas + open-items/ask rail). Timeline tags carry a colored type strip + icon, place emails above/below the axis by direction with "To"/"From", and show a days-from-now chip on hover; selecting a file/email — or following a reminder deep-link — highlights + reveals it in the file tree. (`RightRail` still exports the older `TimelinePanel`, now unused since the timeline became the top band.)
 
 ---
 

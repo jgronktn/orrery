@@ -471,39 +471,160 @@ role-gating).
 
 ---
 
-## Where we left off (2026-06-24)
+## 2026-06-24 — Observability: Pydantic Logfire (OpenTelemetry), request-id correlated
 
-**Orrery is an operational web app.** A signed-in user works the orrery map,
-opens function/project pages, chats with an agent (engineering, or the executive
-assistant at the company core), browses files, works the activity timeline, and
-resolves proposals — all on the local filesystem document store.
+Instrumented the **backend and both agents** with **Pydantic Logfire** (which
+is OpenTelemetry underneath): FastAPI + HTTPX + the PydanticAI agent loop, so a
+single trace covers a request from the API through the agent's tool calls and
+gateway round-trips, with token/cost/latency on the spans. A **`request_id`** is
+generated at the backend edge and propagated to the agent so the two services'
+spans join into one trace.
+
+Kept it **inert by default** — `send_to_logfire="if-token-present"`, so with no
+`LOGFIRE_TOKEN` the instrumentation is wired but silent (no dev dependency on a
+telemetry backend, no data leaves the box). The live project is `ppi-orrery`.
+
+One sharp edge worth recording: **FastAPI is pinned `<0.137`** (`0.136.3`)
+because `opentelemetry-instrumentation-fastapi 0.56b0` crashes against FastAPI
+0.137's new `_IncludedRouter` internal. Revisit the pin when otel-fastapi ships
+a compatible release.
+
+Would reconsider when: we outgrow Logfire's free tier, or want metrics/alerting
+the SQL/dashboards API doesn't cover.
+
+---
+
+## 2026-06-24 — Right-size the DB connection pool
+
+The backend was churning a fresh Postgres connection per request (default
+SQLAlchemy pool behavior under the async/worker shape we run). Sized the pool
+explicitly so connections are reused instead of opened-and-closed on every call
+— a pure efficiency fix, no API or schema change. Confirmed the reduction
+against the live traces.
+
+---
+
+## 2026-06-25 — Agents read PDF text (pdfplumber)
+
+`read_file` already routed PDFs through an `extract_text` → `_pdf_to_text` path,
+but **`pdfplumber` wasn't installed in the agent images**, so the import failed
+silently and PDFs degraded to a filename pointer. Added `pdfplumber` to the
+agents' deps (the `[agent]` extra in `agents/lib`) so the agents now read PDF
+**text** inline. Scanned/image-only PDFs (no text layer) still fall back to the
+filename — we did **not** add OCR (out of scope; the human reads the PDF for
+design-relevant numbers). This stays within the read-only invariant — it only
+widens what `read_file` can parse.
+
+---
+
+## 2026-06-26 — Greige + steel UI redesign + full-width timeline
+
+Recolored the whole UI from the earlier warm "Sage Linen" set to a **neutral
+greige + steel** palette (derived by extracting the colors from a design mockup):
+near-white/cream surfaces, warm-dark ink, and a **single steel chromatic accent**
+(`#50708a`). Tokens live as Tailwind v4 `@theme` variables in `index.css`; fonts
+moved to **Space Grotesk** (sans) + **Space Mono** (mono eyebrows/dates/counts).
+
+Alongside the recolor, restructured the page layout: the **timeline became a
+full-width band across the top** of every page (company / function / project),
+the **composer moved into the top header** (compact), and the right rail's
+"Pending approvals" became a **RailAccordion** (Pending approvals + Reminders,
+reminders default-open and upcoming-only, deep-linking to the owning function).
+Timeline and file-panel controls became steel circle-stroke buttons with
+uppercase mono labels; the company breadcrumb is clickable back to the map.
+
+Two hard constraints held the whole time: **don't touch the OrreryMap** (the
+per-function accent colors in `theme.ts` were left exactly as-is so the frozen
+orbiting map didn't shift) and **no change to functional behavior** — this was
+styling + layout only. Done on a branch with a revert tag, then merged to `main`.
+
+---
+
+## 2026-06-26 — Production deployment to the Droplet (standalone prod compose, host nginx)
+
+Took Orrery live at **https://orrery.noviustec.com** on a resized DigitalOcean
+Droplet. Chose a **standalone `docker-compose.prod.yml`** (repo root) over
+overriding the dev compose, so prod is self-contained and the dev file stays
+simple: no `--reload`, no source/alembic bind-mounts, baked code only.
+
+Key posture decisions:
+- **Only the backend publishes a port, host-local (`127.0.0.1:8000`)** for the
+  box's **host nginx**; gateway/qdrant/postgres/agents are unpublished
+  (Docker-network only). This also closes the gateway:4000 exposure the LiteLLM
+  config warns about, so **no master key** is needed.
+- **Host nginx + certbot** (not a containerized proxy) — the Droplet already
+  fronts another app, and nginx routes by `server_name`, so the new block is
+  additive. nginx serves the built SPA from `/srv/orrery/frontend` and proxies
+  `/api` + `/openapi.json`; a `frontend-builder` compose service (profile
+  `build`) produces the static `dist/`. `client_max_body_size 30m` so the 25 MB
+  upload cap isn't clipped by nginx's 1 MB default.
+- **All containers run as the dedicated non-root `orrery` user**
+  (`ORRERY_UID:ORRERY_GID`), in-compose Postgres with a generated password, and
+  prod env (`ORRERY_ENV=prod`, secure cookies, real CORS origin, strong session
+  secret) from the Droplet `.env`. Migrations run on backend start.
+
+No application code changed — everything prod-sensitive was already
+`ORRERY_`-env-overridable. The runbook lives in `docs/deploy.md`; the nginx
+block in `infra/nginx/`.
+
+---
+
+## 2026-06-26 — Seed prod from dev data, pruned to one user
+
+Rather than start prod empty, migrated the dev data across all three stores —
+**Postgres** (`pg_dump`), the **git file store** (tar with `.git` history), and
+the **Qdrant** volume (tar) — same Postgres 16 / Qdrant 1.12.4 / embedding model
+on both sides, so the copies are drop-in. Before loading, **pruned to the single
+real user** (`jronk@…`): the test accounts and their conversations/proposals
+were deleted and all projects/files/tasks/catalog reassigned to that user
+(handling the FK columns + unique constraints by dedup-delete-then-reassign).
+Argon2 hashes migrated, so prod login uses the same credentials. Migration
+artifacts were staged off-repo (a full data copy — delete after verifying).
+
+---
+
+## Where we left off (2026-06-26)
+
+**Orrery is live in production** at **https://orrery.noviustec.com** (Droplet,
+host nginx + certbot, `docker-compose.prod.yml`, as the `orrery` user, dev data
+migrated over). A signed-in user works the orrery map, opens function/project
+pages, chats with an agent (engineering, or the executive assistant at the
+company core), browses files, works the activity timeline, and resolves
+proposals — all on the local filesystem document store.
 
 What's built and verified:
 
 - **Two agents** — **engineering** (`:8001`, HTTP + CLI): file-store Q&A with
   citations, folder browsing (`list_directory`), reading of Markdown/Word/ODT +
-  parsed `.eml`, Exa parts research, Markdown drafting, human-approved datasheet
-  download; reader scoped to engineering + the current project. **Executive
-  assistant** (`corporate`, `:8002`): cross-function reach (global reader over
-  all functions + projects), drafts into `corporate/drafts/`; answers at the
-  company core and on Corporate.
+  PDF text + parsed `.eml`, Exa parts research, Markdown drafting, human-approved
+  datasheet download; reader scoped to engineering + the current project.
+  **Executive assistant** (`corporate`, `:8002`): cross-function reach (global
+  reader over all functions + projects), drafts into `corporate/drafts/`; answers
+  at the company core and on Corporate.
 - **Backend** (`:8000`, FastAPI on Postgres) — Argon2 email/password auth +
   sessions + password reset; agent registry + routing (engineering + corporate);
   persisted conversations keyed on (user, agent, project); the approval queue
   (risk-routed proposals); the `/internal/agent` API for project tools.
-- **Frontend** (`:5173`, React+Vite+TS) — the orrery map, function + project
-  pages, a **file browser** (tree + preview, incl. `.odt`/`.eml`), scrolling
-  agent conversations in a **Projects/Conversation accordion**, the **activity
-  timeline** (drop files/emails, add notes/tasks/reminders/milestones; type
-  strip + icon; emails above/below by direction with To/From; days-from-now
-  chip; selecting a file/email highlights it in the tree), and an IT credential
-  vault.
+- **Frontend** (`:5173` dev, nginx-served in prod, React+Vite+TS) — a **greige +
+  steel** UI: the orrery map, function + project pages, a **file browser** (tree
+  + preview, incl. `.odt`/`.eml`), scrolling agent conversations in a
+  **Projects/Conversation accordion**, and a **full-width activity timeline band**
+  across the top (drop files/emails, add notes/tasks/reminders/milestones; type
+  strip + icon; emails above/below by direction with To/From; days-from-now chip;
+  selecting a file/email highlights it in the tree). Right rail is a RailAccordion
+  (Pending approvals + upcoming Reminders) over an ask box; the composer sits in
+  the top header. Plus an IT credential vault.
 - **Document store** — `/var/lib/orrery/files/`, a git repo; every write is
-  committed. Rich cataloging: text extraction (incl. `.odt`/`.eml` body), keyword
-  + vector search, email From/To/Cc/attachments + direction.
+  committed. Rich cataloging: text extraction (incl. PDF text via `pdfplumber`,
+  `.odt`/`.eml` body), keyword + vector search, email From/To/Cc/attachments +
+  direction.
 - **Cross-functional projects** — `project_agents` / `project_member_agents`,
   per-project folder trees + sectioned research logs, and shared task +
   research-log tools any agent inherits.
+- **Observability** — Logfire/OpenTelemetry tracing of the backend + both agents,
+  `request_id`-correlated end to end (inert until `LOGFIRE_TOKEN` is set).
+- **Deployed** — production at `orrery.noviustec.com` via `docker-compose.prod.yml`
+  behind host nginx + certbot, as the `orrery` user; see `docs/deploy.md`.
 
 Run it: `make up` (backend stack) + `npm run dev` (frontend). CLI:
 `make ask|chat|draft|save-spec`, plus KB tools. Everything is committed and
@@ -511,8 +632,8 @@ pushed to `github.com/jgronktn/orrery`.
 
 **Next (per CLAUDE.md):** Gmail/email integration (inbox view, thread→project
 assignment with KB ingestion, outbound Gmail drafts); cross-agent querying for
-the EA + founder/CEO/CFO role-gating; real Postmark; and deployment to a
-DigitalOcean Droplet.
+the EA + founder/CEO/CFO role-gating; and real Postmark email delivery (still a
+console sender today).
 
 **Things that may surprise a fresh reader:**
 
