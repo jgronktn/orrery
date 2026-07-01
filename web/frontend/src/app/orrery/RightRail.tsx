@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import type { ProposalRecord, TimelineNode } from "../../api/client";
 import { FunctionTimeline } from "./FunctionTimeline";
+import { ThinkingLabel } from "./ThinkingLabel";
 import { funcLabel, risk } from "./theme";
 import { relAgo } from "./time";
 import { daysFromNow, fmtDate } from "./timelineScale";
@@ -382,18 +383,27 @@ export function AskBar({
         )}
       </div>
       <div className="px-4 pb-[31px] pt-3">
-      <button
-        onClick={() => onAsk(suggestion)}
-        disabled={busy}
-        className="mb-2 flex w-full items-center gap-2 rounded-lg border border-dashed border-line-soft bg-paper-alt px-3 py-2 text-left text-[12px] text-muted hover:bg-rowhover disabled:opacity-50"
-      >
-        <span aria-hidden>✦</span>
-        <span className="truncate">{suggestion}</span>
-      </button>
+      {busy ? (
+        // Live feedback right where the user asked — the conversation's
+        // "Thinking…" can be scrolled off or in a collapsed pane.
+        <div className="mb-2 flex w-full items-center gap-2 rounded-lg border border-line-soft bg-paper-alt px-3 py-2 text-[12px] text-muted">
+          <span className="h-2 w-2 animate-orrery-pulse rounded-full bg-[#50708a]" />
+          <ThinkingLabel agentName={agentName} />
+        </div>
+      ) : (
+        <button
+          onClick={() => onAsk(suggestion)}
+          className="mb-2 flex w-full items-center gap-2 rounded-lg border border-dashed border-line-soft bg-paper-alt px-3 py-2 text-left text-[12px] text-muted hover:bg-rowhover"
+        >
+          <span aria-hidden>✦</span>
+          <span className="truncate">{suggestion}</span>
+        </button>
+      )}
       <div className="flex items-end gap-2 rounded-xl border border-line-soft bg-white px-3 py-2">
         <textarea
           value={text}
           rows={2}
+          disabled={busy}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
@@ -401,8 +411,8 @@ export function AskBar({
               submit();
             }
           }}
-          placeholder={`Ask ${agentName}…`}
-          className="min-w-0 flex-1 resize-none bg-transparent text-[13px] leading-relaxed text-ink outline-none placeholder:text-hint"
+          placeholder={busy ? "Waiting for a reply…" : `Ask ${agentName}…`}
+          className="min-w-0 flex-1 resize-none bg-transparent text-[13px] leading-relaxed text-ink outline-none placeholder:text-hint disabled:opacity-60"
         />
         <button
           onClick={submit}
@@ -410,7 +420,11 @@ export function AskBar({
           className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-ink text-[#f6f4ef] hover:bg-ink-soft disabled:opacity-50"
           aria-label="Send"
         >
-          {busy ? "…" : "↑"}
+          {busy ? (
+            <span className="h-2 w-2 animate-orrery-pulse rounded-full bg-[#f6f4ef]" />
+          ) : (
+            "↑"
+          )}
         </button>
       </div>
       </div>

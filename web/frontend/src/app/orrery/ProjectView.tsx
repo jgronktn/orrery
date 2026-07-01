@@ -12,12 +12,14 @@ import {
 } from "../../api/client";
 import { FileViewer, type PreviewFile } from "./FileViewer";
 import { FunctionFiles } from "./FunctionFiles";
+import { LinkControls } from "./ProjectLinks";
 import { FunctionTimeline } from "./FunctionTimeline";
 import { AskBar } from "./RightRail";
 import { Shell } from "./Shell";
 import { accentOf } from "./theme";
-import { isActivity, nodeStorePath } from "./timelineScale";
+import { isActivity, nodeStorePath, todayISO } from "./timelineScale";
 import {
+  AddItemForm,
   CanvasAccordion,
   Composer,
   Conversation,
@@ -46,7 +48,9 @@ export default function ProjectView() {
   const [busy, setBusy] = useState(false);
   const [addKind, setAddKind] = useState<string | null>(null);
   const [addTitle, setAddTitle] = useState("");
+  const [addDetails, setAddDetails] = useState("");
   const [addDue, setAddDue] = useState("");
+  const [addBusy, setAddBusy] = useState(false);
   // Filesystem panel (left of the lower canvas) + open-file preview.
   const [folders, setFolders] = useState<string[]>([]);
   const [reloadToken, setReloadToken] = useState(0);
@@ -55,6 +59,9 @@ export default function ProjectView() {
   const [revealTime, setRevealTime] = useState<number | null>(null);
   // Transient confirmation banner (e.g. after a drop). Auto-clears.
   const [notice, setNotice] = useState<string | null>(null);
+  // A file currently uploading (its name) — a sticky banner while the POST is
+  // in flight, since text extraction (esp. PDFs) can take several seconds.
+  const [uploading, setUploading] = useState<string | null>(null);
 
   const accent = accentOf(project?.function ?? "");
 
@@ -118,6 +125,7 @@ export default function ProjectView() {
   const fail = (e: unknown) => setErr(e instanceof ApiError ? e.message : String(e));
 
   const onDropFile = async (file: File) => {
+    setUploading(file.name);
     try {
       const node = await api.uploadDocument(id, file);
       refresh();
@@ -134,27 +142,41 @@ export default function ProjectView() {
       );
     } catch (e) {
       fail(e);
+    } finally {
+      setUploading(null);
     }
   };
-  const onAddTask = async (title: string, kind: string, due: string | null) => {
+  const onAddTask = async (
+    title: string,
+    kind: string,
+    due: string | null,
+    description: string | null,
+  ) => {
     try {
-      await api.createTask(id, { title, kind, due_date: due });
+      await api.createTask(id, { title, kind, due_date: due, description });
       refresh();
     } catch (e) {
       fail(e);
     }
   };
-  const submitAdd = () => {
-    const t = addTitle.trim();
-    if (!t || !addKind) return;
-    void onAddTask(t, addKind, addDue || null);
+  const clearAdd = () => {
     setAddKind(null);
     setAddTitle("");
+    setAddDetails("");
     setAddDue("");
+  };
+  const submitAdd = async () => {
+    const t = addTitle.trim();
+    if (!t || !addKind) return;
+    setAddBusy(true);
+    await onAddTask(t, addKind, addDue || null, addDetails.trim() || null);
+    setAddBusy(false);
+    clearAdd();
   };
   const onDropKind = (kind: string, timeMs: number) => {
     setAddKind(kind);
     setAddTitle("");
+    setAddDetails("");
     setAddDue(new Date(timeMs).toISOString().slice(0, 10));
   };
   const onSetNote = async (node: TimelineNode, note: string | null) => {
@@ -233,6 +255,15 @@ export default function ProjectView() {
       fail(e);
     }
   };
+  // Remove a spec shortcut (the source function file is untouched).
+  const onUnlink = async (linkId: string) => {
+    try {
+      await api.unlinkProjectDoc(id, linkId);
+      setReloadToken((n) => n + 1);
+    } catch (e) {
+      fail(e);
+    }
+  };
   const resolve = async (pid: string, okay: boolean) => {
     try {
       if (okay) await api.approveProposal(pid);
@@ -285,18 +316,13 @@ export default function ProjectView() {
         <Composer
           compact
           kind={addKind}
-          title={addTitle}
-          due={addDue}
           disabled={!project}
           onChoose={(k) => {
-            setAddKind((cur) => (cur === k ? null : k));
             setAddTitle("");
-            setAddDue("");
+            setAddDetails("");
+            setAddDue(todayISO());
+            setAddKind((cur) => (cur === k ? null : k));
           }}
-          onTitle={setAddTitle}
-          onDue={setAddDue}
-          onSubmit={submitAdd}
-          onCancel={() => setAddKind(null)}
         />
       }
     >
@@ -306,7 +332,13 @@ export default function ProjectView() {
             {err}
           </div>
         )}
-        {notice && (
+        {uploading && (
+          <div className="flex items-center gap-2 border-b border-line bg-[#e8edf1] px-6 py-2 text-[12px] text-[#3c5670]">
+            <span className="h-2 w-2 animate-orrery-pulse rounded-full bg-[#50708a]" />
+            Uploading “{uploading}”…
+          </div>
+        )}
+        {notice && !uploading && (
           <div className="border-b border-line bg-[#e8edf1] px-6 py-2 text-[12px] text-[#3c5670]">
             {notice}
           </div>
@@ -320,7 +352,12 @@ export default function ProjectView() {
               accent={accent}
               selectedId={current?.id ?? null}
               focusTime={focusNode?.time ?? revealTime}
-              onSelect={(n) => setSelectedId(n ? n.id : null)}
+              onSelect={(n) => {
+                setSelectedId(n ? n.id : null);
+                // Selecting on the timeline drives the tree highlight; clear a
+                // stale open-file preview so it doesn't keep winning activePath.
+                if (n) setPreview(null);
+              }}
               onDropFile={(f) => void onDropFile(f)}
               onDropKind={onDropKind}
             />
@@ -330,29 +367,48 @@ export default function ProjectView() {
         {/* content row below the timeline: file system + canvas + right sidebar */}
         <div className="flex min-h-0 flex-1">
           <div className="flex min-w-0 flex-1">
-            <div className="flex w-[35%] min-w-0 border-r border-line">
+            <div className="flex w-[35%] min-w-0 flex-col border-r border-line">
               {project && (
-                <FunctionFiles
-                  variant="fill"
-                  containerKey={id}
-                  title={`${project.name} files`}
-                  accent={accent}
-                  rootPrefix={`projects/${project.slug}`}
-                  loadTree={() => api.projectTree(id)}
-                  upload={(file, dir) => api.uploadDocument(id, file, dir)}
-                  folders={folders}
-                  reloadToken={reloadToken}
-                  onOpenFile={setPreview}
-                  // Highlight in the tree: the previewed file, or — when a
-                  // file/email timeline item is selected — that item's file.
-                  activePath={preview?.path ?? nodeStorePath(current)}
-                  onUploaded={refresh}
-                  onRename={onFileRename}
-                  onMove={onFileMove}
-                  onDelete={onFileDelete}
-                  onAddFolder={onAddFolder}
-                  onDeleteFolder={onDeleteFolder}
-                />
+                <>
+                  <LinkControls
+                    projectId={id}
+                    slug={project.slug}
+                    projectFolders={folders}
+                    accent={accent}
+                    onChanged={() => setReloadToken((n) => n + 1)}
+                  />
+                  <div className="flex min-h-0 flex-1">
+                    <FunctionFiles
+                      variant="fill"
+                      containerKey={id}
+                      title={`${project.name} files`}
+                      accent={accent}
+                      rootPrefix={`projects/${project.slug}`}
+                      loadTree={() => api.projectTree(id)}
+                      upload={async (file, dir) => {
+                        setUploading(file.name);
+                        try {
+                          return await api.uploadDocument(id, file, dir);
+                        } finally {
+                          setUploading(null);
+                        }
+                      }}
+                      folders={folders}
+                      reloadToken={reloadToken}
+                      onOpenFile={setPreview}
+                      // Highlight in the tree: the previewed file, or — when a
+                      // file/email timeline item is selected — that item's file.
+                      activePath={preview?.path ?? nodeStorePath(current)}
+                      onUploaded={refresh}
+                      onRename={onFileRename}
+                      onMove={onFileMove}
+                      onDelete={onFileDelete}
+                      onAddFolder={onAddFolder}
+                      onDeleteFolder={onDeleteFolder}
+                      onUnlink={onUnlink}
+                    />
+                  </div>
+                </>
               )}
             </div>
             <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -394,6 +450,20 @@ export default function ProjectView() {
           {/* right sidebar — starts below the timeline: open items (or selected
               detail) over the agent ask */}
           <aside className="flex w-[25%] min-w-[300px] flex-col border-l border-line bg-[#f1f1ef]">
+          {addKind && (
+            <AddItemForm
+              kind={addKind}
+              title={addTitle}
+              details={addDetails}
+              due={addDue}
+              busy={addBusy}
+              onTitle={setAddTitle}
+              onDetails={setAddDetails}
+              onDue={setAddDue}
+              onSave={() => void submitAdd()}
+              onCancel={clearAdd}
+            />
+          )}
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
             {current ? (
               <DetailPanel

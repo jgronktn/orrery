@@ -17,6 +17,9 @@ interface FileOps {
   onDelete: (path: string) => void;
   onAddFolder: (parent: string, name: string) => void;
   onDeleteFolder: (path: string) => void;
+  // Remove a spec shortcut (the linked source file is kept). Null on panels
+  // that don't support linking (e.g. a function's own file panel).
+  onUnlink?: (linkId: string) => void;
 }
 
 export function FunctionFiles({
@@ -36,6 +39,7 @@ export function FunctionFiles({
   onDelete,
   onAddFolder,
   onDeleteFolder,
+  onUnlink,
   variant = "panel",
 }: {
   containerKey: string; // stable id; refetch the tree when it changes
@@ -54,6 +58,7 @@ export function FunctionFiles({
   onDelete: (path: string) => void;
   onAddFolder: (parent: string, name: string) => void;
   onDeleteFolder: (path: string) => void;
+  onUnlink?: (linkId: string) => void;
   // "panel" = fixed 520px left panel (Company Home); "fill" = fill its parent.
   variant?: "panel" | "fill";
 }) {
@@ -111,6 +116,7 @@ export function FunctionFiles({
     onDelete,
     onAddFolder,
     onDeleteFolder,
+    onUnlink,
   };
 
   return (
@@ -290,6 +296,15 @@ function TreeNode({
             <Chevron open={open} />
             <FolderGlyph />
             <span className="truncate text-[12.5px] text-strong">{node.name}</span>
+            {node.link_folder && (
+              <span
+                title={`Link folder — drops route to ${node.link_dest}`}
+                className="shrink-0 rounded-sm px-1 font-mono text-[9px] uppercase tracking-wide"
+                style={{ color: accent, background: `${accent}14` }}
+              >
+                ↗ portal
+              </span>
+            )}
           </button>
           {confirming ? (
             <span className="flex shrink-0 items-center gap-1 text-[11px]">
@@ -387,6 +402,7 @@ function FileRow({
   ops: FileOps;
 }) {
   const path = node.store_path ?? "";
+  const isLink = !!node.link_id; // a shortcut to a function-corpus file
   const [mode, setMode] = useState<"idle" | "rename" | "move" | "delete">("idle");
   const [draft, setDraft] = useState(node.name);
 
@@ -430,13 +446,35 @@ function FileRow({
         <FileGlyph accent={accent} />
         <span
           className="truncate text-[12.5px]"
-          style={{ color: active ? accent : "#605e54", fontWeight: active ? 600 : 400 }}
+          style={{
+            color: active ? accent : isLink ? "#8a877c" : "#605e54",
+            fontWeight: active ? 600 : 400,
+            fontStyle: isLink ? "italic" : undefined,
+          }}
         >
           {node.name}
         </span>
+        {isLink && (
+          <span
+            title="Linked spec — opens the original; the file lives in its function folder"
+            className="shrink-0 rounded-sm px-1 font-mono text-[9px] uppercase tracking-wide"
+            style={{ color: accent, background: `${accent}14` }}
+          >
+            ↗ link
+          </span>
+        )}
       </button>
 
-      {mode === "delete" ? (
+      {isLink ? (
+        <span className="flex shrink-0 items-center gap-0.5 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
+          <IconBtn
+            title="Unlink (the source file is kept)"
+            onClick={() => node.link_id && ops.onUnlink?.(node.link_id)}
+          >
+            <XGlyph />
+          </IconBtn>
+        </span>
+      ) : mode === "delete" ? (
         <span className="flex shrink-0 items-center gap-1 text-[11px]">
           <span className="text-muted">Delete?</span>
           <button

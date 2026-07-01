@@ -53,6 +53,8 @@ export default function CompanyHome() {
   const [fnTimeline, setFnTimeline] = useState<TimelineNode[]>([]);
   const [reloadToken, setReloadToken] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
+  // A file currently uploading (its name) — sticky banner while the POST runs.
+  const [uploading, setUploading] = useState<string | null>(null);
   const [vaultOpen, setVaultOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const navigate = useNavigate();
@@ -323,12 +325,15 @@ export default function CompanyHome() {
       );
   const onDropTimeline = selFn
     ? async (file: File) => {
+        setUploading(file.name);
         try {
           await api.uploadFunctionDoc(selFn.key, file);
           setReloadToken((n) => n + 1);
           void load();
         } catch (e) {
           setError(e instanceof ApiError ? e.message : String(e));
+        } finally {
+          setUploading(null);
         }
       }
     : undefined;
@@ -412,7 +417,14 @@ export default function CompanyHome() {
       accent={accentOf(selFn.key)}
       rootPrefix={selFn.folder}
       loadTree={() => api.functionTree(selFn.key)}
-      upload={(file, dir) => api.uploadFunctionDoc(selFn.key, file, dir)}
+      upload={async (file, dir) => {
+        setUploading(file.name);
+        try {
+          return await api.uploadFunctionDoc(selFn.key, file, dir);
+        } finally {
+          setUploading(null);
+        }
+      }}
       folders={folders}
       reloadToken={reloadToken}
       onOpenFile={setPreview}
@@ -444,7 +456,13 @@ export default function CompanyHome() {
           {error}
         </div>
       )}
-      {notice && (
+      {uploading && (
+        <div className="flex items-center gap-2 border-b border-line bg-[#e8edf1] px-6 py-2 text-[12px] text-[#3c5670]">
+          <span className="h-2 w-2 animate-orrery-pulse rounded-full bg-[#50708a]" />
+          Uploading “{uploading}”…
+        </div>
+      )}
+      {notice && !uploading && (
         <div className="flex items-center justify-between border-b border-line bg-paper-alt px-6 py-2 text-[12px] text-strong">
           <span>{notice}</span>
           <button
@@ -504,11 +522,14 @@ export default function CompanyHome() {
                       onOpenVault={() => setVaultOpen(true)}
                       toolLines={toolLines}
                       onDropFile={async (key, file) => {
+                        setUploading(file.name);
                         try {
                           await api.uploadFunctionDoc(key, file);
                           await load();
                         } catch (e) {
                           setError(e instanceof ApiError ? e.message : String(e));
+                        } finally {
+                          setUploading(null);
                         }
                       }}
                     />

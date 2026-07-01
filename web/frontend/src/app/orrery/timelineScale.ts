@@ -76,6 +76,7 @@ export const TYPE_COLOR: Record<string, string> = {
   milestone: "#2b2a26", // ink
   reminder: "#a86676", // clay-rose
   note: "#66707f", // muted slate
+  decision: "#4f8073", // muted teal-green
   other: "#79776b", // greige
 };
 export const TYPE_LABEL: Record<string, string> = {
@@ -90,6 +91,7 @@ export const TYPE_LABEL: Record<string, string> = {
   milestone: "Milestone",
   reminder: "Reminder",
   note: "Note",
+  decision: "Decision",
   other: "File",
 };
 
@@ -116,6 +118,13 @@ export function nodeStorePath(n: TimelineNode | null | undefined): string | null
   if (n.id.startsWith("file:")) return n.id.slice(5);
   if (n.id.startsWith("doc:")) return n.path ?? null;
   return null;
+}
+
+/** Today's date as YYYY-MM-DD in the viewer's LOCAL timezone — for defaulting a
+ * <input type="date">. Local (not UTC) so an evening user isn't shown tomorrow. */
+export function todayISO(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 /** Human "days from now" for a timeline item, in UTC calendar days (matching

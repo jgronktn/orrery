@@ -470,6 +470,93 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Project Links
+         * @description The project's linked specs (shortcuts to function-corpus files).
+         */
+        get: operations["list_project_links_api_projects__project_id__links_get"];
+        put?: never;
+        /**
+         * Create Project Link
+         * @description Link an existing function-corpus file into a project folder (no copy).
+         */
+        post: operations["create_project_link_api_projects__project_id__links_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/links/{link_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Project Link
+         * @description Remove a shortcut (unlink only; the source file is untouched).
+         */
+        delete: operations["delete_project_link_api_projects__project_id__links__link_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/link-folders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Link Folders */
+        get: operations["list_link_folders_api_projects__project_id__link_folders_get"];
+        put?: never;
+        /**
+         * Create Link Folder
+         * @description Designate a project folder as a portal: drops route to a function corpus,
+         *     leaving a shortcut behind. Sensitive (risk-floored) destinations are rejected
+         *     for now — the queued write can't produce a synchronous link.
+         */
+        post: operations["create_link_folder_api_projects__project_id__link_folders_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/link-folders/{folder_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Link Folder
+         * @description Stop a folder being a portal (existing shortcuts in it stay).
+         */
+        delete: operations["delete_link_folder_api_projects__project_id__link_folders__folder_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/functions": {
         parameters: {
             query?: never;
@@ -1124,6 +1211,15 @@ export interface components {
             children?: components["schemas"]["FsTreeNode"][] | null;
             /** Store Path */
             store_path?: string | null;
+            /** Link Id */
+            link_id?: string | null;
+            /**
+             * Link Folder
+             * @default false
+             */
+            link_folder: boolean;
+            /** Link Dest */
+            link_dest?: string | null;
         };
         /** FunctionOut */
         FunctionOut: {
@@ -1172,6 +1268,29 @@ export interface components {
             /** Doc Path */
             doc_path: string;
         };
+        /** LinkFolderIn */
+        LinkFolderIn: {
+            /** Folder Path */
+            folder_path: string;
+            /** Dest Function */
+            dest_function: string;
+            /** Dest Dir */
+            dest_dir: string;
+        };
+        /** LinkFolderOut */
+        LinkFolderOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Folder Path */
+            folder_path: string;
+            /** Dest Function */
+            dest_function: string;
+            /** Dest Dir */
+            dest_dir: string;
+        };
         /** LoginIn */
         LoginIn: {
             /**
@@ -1217,6 +1336,31 @@ export interface components {
              * Format: email
              */
             email: string;
+        };
+        /** ProjectDocLinkIn */
+        ProjectDocLinkIn: {
+            /** Path */
+            path: string;
+            /** Target Dir */
+            target_dir?: string | null;
+        };
+        /** ProjectDocLinkOut */
+        ProjectDocLinkOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Path */
+            path: string;
+            /** Name */
+            name: string;
+            /** Type */
+            type: string;
+            /** Function */
+            function: string;
+            /** Target Dir */
+            target_dir: string;
         };
         /** ProjectIn */
         ProjectIn: {
@@ -2461,6 +2605,198 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ContainerFile"][];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_project_links_api_projects__project_id__links_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDocLinkOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_project_link_api_projects__project_id__links_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectDocLinkIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDocLinkOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_project_link_api_projects__project_id__links__link_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                link_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_link_folders_api_projects__project_id__link_folders_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkFolderOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_link_folder_api_projects__project_id__link_folders_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkFolderIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkFolderOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_link_folder_api_projects__project_id__link_folders__folder_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                folder_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

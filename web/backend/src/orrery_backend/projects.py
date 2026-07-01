@@ -6,6 +6,7 @@ membership are a later concern.
 """
 from __future__ import annotations
 
+import hashlib
 import re
 import uuid
 from datetime import datetime, timezone
@@ -27,6 +28,7 @@ from sqlalchemy.orm import Session as DbSession
 from orrery_lib import docstore, filestore
 
 from . import commit_path, functions, projectstore
+from .activities import index_task_kb, unindex_task_kb
 from .config import settings
 from .auth import current_user
 from .db import get_db
@@ -34,6 +36,8 @@ from .models import (
     Catalog,
     Project,
     ProjectAgent,
+    ProjectDocumentLink,
+    ProjectLinkFolder,
     ProjectMember,
     ProjectMemberAgent,
     Task,
@@ -46,6 +50,10 @@ from .schemas import (
     FileOpResult,
     FolderCreateIn,
     FsTreeNode,
+    LinkFolderIn,
+    LinkFolderOut,
+    ProjectDocLinkIn,
+    ProjectDocLinkOut,
     ProjectIn,
     ProjectOut,
     ProjectUpdate,
@@ -524,6 +532,21 @@ async def upload_document(
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "target outside project")
         dest_dir = norm
     data = await _read_upload(file)
+    # If the target folder is a "link folder" portal, the file is written into
+    # the function corpus instead of the project, and a shortcut is left behind.
+    if dest_dir is not None:
+        portal = db.scalar(
+            select(ProjectLinkFolder).where(
+                ProjectLinkFolder.project_id == project.id,
+                ProjectLinkFolder.folder_path == dest_dir,
+            )
+        )
+        if portal is not None:
+            return _doc_node(
+                _portal_ingest(
+                    db, project, portal, data, file.filename, user, background_tasks
+                )
+            )
     return _doc_node(
         ingest_timeline_drop(
             db, project, data, file.filename, user, background_tasks, dest_dir=dest_dir
@@ -554,9 +577,12 @@ def project_tree(
     project = db.get(Project, project_id)
     assert project is not None
     root = filestore.FILES_ROOT / f"projects/{project.slug}"
-    if root.exists():
-        return projectstore.build_tree(root, "root")
-    return {"name": "root", "children": []}
+    tree = (
+        projectstore.build_tree(root, "root")
+        if root.exists()
+        else {"name": "root", "children": []}
+    )
+    return augment_project_tree(tree, project, db)
 
 
 @router.get("/{project_id}/folders", response_model=list[str])
@@ -740,7 +766,7 @@ def create_task(
     user: User = Depends(current_user),
     db: DbSession = Depends(get_db),
 ) -> Task:
-    get_container(project_id, user, db)  # project membership OR function access
+    container = get_container(project_id, user, db)  # membership OR function access
     task = Task(
         project_id=project_id,
         title=body.title,
@@ -753,6 +779,8 @@ def create_task(
     db.add(task)
     db.commit()
     db.refresh(task)
+    index_task_kb(task, container_name=container.name)  # → agent-searchable
+    db.commit()
     return task
 
 
@@ -771,6 +799,7 @@ def delete_task(
     task = db.get(Task, task_id)
     if task is None or task.project_id != project_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "task not found")
+    unindex_task_kb(task)  # drop its learnings point
     db.delete(task)
     db.commit()
     return None
@@ -915,3 +944,294 @@ def list_container_files(
         {"path": c.path, "name": c.path.rsplit("/", 1)[-1], "type": c.type}
         for c in db.scalars(stmt)
     ]
+
+
+# ── Spec linking: reference function-corpus files into a project ─────
+# A link surfaces a function file inside a project's tree as a shortcut, with
+# no copy (catalog.path is UNIQUE). Two ways in: an explicit picker (link an
+# existing file) and a "link folder" portal (drops route to the function
+# corpus, leaving a shortcut behind). See docs/decisions.md.
+
+
+def _require_project(project_id: uuid.UUID, user: User, db: DbSession) -> Project:
+    """A real (kind=project) container the user belongs to. Links/portals target
+    a project, never a function stream."""
+    container = get_container(project_id, user, db)
+    if container.kind != "project":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "links target a project")
+    return container
+
+
+def _validate_project_dir(project: Project, target_dir: str | None) -> str:
+    """Normalize a project-relative target folder (default = project root); it
+    must exist on disk and live under projects/<slug>."""
+    root = f"projects/{project.slug}"
+    if not target_dir:
+        return root
+    norm = target_dir.strip().strip("/").replace("\\", "/")
+    if ".." in norm.split("/") or not (norm == root or norm.startswith(root + "/")):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "target outside project")
+    if not (filestore.FILES_ROOT / norm).is_dir():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "target folder not found")
+    return norm
+
+
+def _validate_function_dir(key: str, dest_dir: str) -> str:
+    """Normalize a destination folder under a function's corpus; must exist."""
+    fdef = functions.FUNCTIONS.get(key)
+    if fdef is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "function not found")
+    norm = (dest_dir or "").strip().strip("/").replace("\\", "/")
+    if not norm or ".." in norm.split("/"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "invalid destination folder")
+    if norm != fdef.folder and not norm.startswith(fdef.folder + "/"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "destination outside function folder")
+    if not (filestore.FILES_ROOT / norm).is_dir():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "destination folder not found")
+    return norm
+
+
+def _link_out(link: ProjectDocumentLink, db: DbSession) -> dict:
+    cat = db.scalar(select(Catalog).where(Catalog.path == link.doc_path))
+    return {
+        "id": link.id,
+        "path": link.doc_path,
+        "name": link.doc_path.rsplit("/", 1)[-1],
+        "type": cat.type if cat else "other",
+        "function": cat.function if cat else "",
+        "target_dir": link.target_dir,
+    }
+
+
+def _upsert_link(
+    db: DbSession, project_id: uuid.UUID, doc_path: str, target_dir: str, user: User
+) -> ProjectDocumentLink:
+    """Idempotent on (project, doc_path); re-linking updates the target folder."""
+    link = db.scalar(
+        select(ProjectDocumentLink).where(
+            ProjectDocumentLink.project_id == project_id,
+            ProjectDocumentLink.doc_path == doc_path,
+        )
+    )
+    if link is None:
+        link = ProjectDocumentLink(
+            project_id=project_id, doc_path=doc_path,
+            target_dir=target_dir, created_by=user.id,
+        )
+        db.add(link)
+    else:
+        link.target_dir = target_dir
+    db.commit()
+    db.refresh(link)
+    return link
+
+
+def _portal_ingest(
+    db: DbSession, project: Project, portal: ProjectLinkFolder,
+    data: bytes, filename: str | None, user: User, background_tasks: BackgroundTasks,
+) -> Catalog:
+    """A drop into a link folder: write into the function corpus (deduped by
+    sha256 — same content already there → no copy), then leave a shortcut in the
+    project's portal folder. Returns the (existing or new) function Catalog row."""
+    sha = hashlib.sha256(data).hexdigest()
+    existing = db.scalar(
+        select(Catalog).where(
+            Catalog.container_kind == "function",
+            Catalog.function == portal.dest_function,
+            Catalog.sha256 == sha,
+        )
+    )
+    if existing is not None:
+        cat = existing
+    else:
+        stream = db.scalar(
+            select(Project).where(
+                Project.kind == "function_stream",
+                Project.function == portal.dest_function,
+            )
+        )
+        assert stream is not None  # portal creation validated the function exists
+        cat = ingest_timeline_drop(
+            db, stream, data, filename, user, background_tasks, dest_dir=portal.dest_dir
+        )
+    _upsert_link(db, project.id, cat.path, portal.folder_path, user)
+    return cat
+
+
+@router.get("/{project_id}/links", response_model=list[ProjectDocLinkOut])
+def list_project_links(
+    project_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> list[dict]:
+    """The project's linked specs (shortcuts to function-corpus files)."""
+    project = _require_project(project_id, user, db)
+    links = db.scalars(
+        select(ProjectDocumentLink)
+        .where(ProjectDocumentLink.project_id == project.id)
+        .order_by(ProjectDocumentLink.created_at)
+    ).all()
+    return [_link_out(link, db) for link in links]
+
+
+@router.post(
+    "/{project_id}/links", response_model=ProjectDocLinkOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_project_link(
+    project_id: uuid.UUID,
+    body: ProjectDocLinkIn,
+    user: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> dict:
+    """Link an existing function-corpus file into a project folder (no copy)."""
+    project = _require_project(project_id, user, db)
+    cat = db.scalar(select(Catalog).where(Catalog.path == body.path))
+    if (
+        cat is None
+        or cat.container_kind != "function"
+        or not functions.can_access_function(user, cat.function)
+    ):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "file not found")
+    target_dir = _validate_project_dir(project, body.target_dir)
+    return _link_out(_upsert_link(db, project.id, cat.path, target_dir, user), db)
+
+
+@router.delete(
+    "/{project_id}/links/{link_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+def delete_project_link(
+    project_id: uuid.UUID,
+    link_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> None:
+    """Remove a shortcut (unlink only; the source file is untouched)."""
+    project = _require_project(project_id, user, db)
+    link = db.get(ProjectDocumentLink, link_id)
+    if link is None or link.project_id != project.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "link not found")
+    db.delete(link)
+    db.commit()
+    return None
+
+
+@router.get("/{project_id}/link-folders", response_model=list[LinkFolderOut])
+def list_link_folders(
+    project_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> list[dict]:
+    project = _require_project(project_id, user, db)
+    rows = db.scalars(
+        select(ProjectLinkFolder).where(ProjectLinkFolder.project_id == project.id)
+    ).all()
+    return [
+        {"id": r.id, "folder_path": r.folder_path,
+         "dest_function": r.dest_function, "dest_dir": r.dest_dir}
+        for r in rows
+    ]
+
+
+@router.post(
+    "/{project_id}/link-folders", response_model=LinkFolderOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_link_folder(
+    project_id: uuid.UUID,
+    body: LinkFolderIn,
+    user: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> dict:
+    """Designate a project folder as a portal: drops route to a function corpus,
+    leaving a shortcut behind. Sensitive (risk-floored) destinations are rejected
+    for now — the queued write can't produce a synchronous link."""
+    project = _require_project(project_id, user, db)
+    folder_path = _validate_project_dir(project, body.folder_path)
+    if not functions.can_access_function(user, body.dest_function):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "function not found")
+    dest_dir = _validate_function_dir(body.dest_function, body.dest_dir)
+    if commit_path.path_risk_floor(dest_dir.rstrip("/") + "/") != "low":
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "that destination needs approval on write; not allowed as a link folder yet",
+        )
+    lf = db.scalar(
+        select(ProjectLinkFolder).where(
+            ProjectLinkFolder.project_id == project.id,
+            ProjectLinkFolder.folder_path == folder_path,
+        )
+    )
+    if lf is None:
+        lf = ProjectLinkFolder(
+            project_id=project.id, folder_path=folder_path,
+            dest_function=body.dest_function, dest_dir=dest_dir, created_by=user.id,
+        )
+        db.add(lf)
+    else:
+        lf.dest_function, lf.dest_dir = body.dest_function, dest_dir
+    db.commit()
+    db.refresh(lf)
+    return {"id": lf.id, "folder_path": lf.folder_path,
+            "dest_function": lf.dest_function, "dest_dir": lf.dest_dir}
+
+
+@router.delete(
+    "/{project_id}/link-folders/{folder_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+def delete_link_folder(
+    project_id: uuid.UUID,
+    folder_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> None:
+    """Stop a folder being a portal (existing shortcuts in it stay)."""
+    project = _require_project(project_id, user, db)
+    lf = db.get(ProjectLinkFolder, folder_id)
+    if lf is None or lf.project_id != project.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "link folder not found")
+    db.delete(lf)
+    db.commit()
+    return None
+
+
+def _find_tree_node(node: dict, store_path: str) -> dict | None:
+    if node.get("store_path") == store_path:
+        return node
+    for child in node.get("children") or []:
+        found = _find_tree_node(child, store_path)
+        if found is not None:
+            return found
+    return None
+
+
+def augment_project_tree(tree: dict, project: Project, db: DbSession) -> dict:
+    """Merge linking metadata into a project's filesystem tree: mark portal
+    folders, and inject each link as a shortcut leaf at its target folder
+    (store_path = the SOURCE path, so open/preview work unchanged). Stale links
+    (source gone) are skipped; a missing target folder falls back to the root."""
+    for portal in db.scalars(
+        select(ProjectLinkFolder).where(ProjectLinkFolder.project_id == project.id)
+    ):
+        node = _find_tree_node(tree, portal.folder_path)
+        if node is not None and node.get("children") is not None:
+            node["link_folder"] = True
+            node["link_dest"] = portal.dest_dir
+
+    for link in db.scalars(
+        select(ProjectDocumentLink).where(ProjectDocumentLink.project_id == project.id)
+    ):
+        cat = db.scalar(select(Catalog).where(Catalog.path == link.doc_path))
+        if cat is None:
+            continue  # stale source — skip
+        target = _find_tree_node(tree, link.target_dir) or tree
+        if target.get("children") is None:
+            target = tree
+        target["children"].append(
+            {
+                "name": link.doc_path.rsplit("/", 1)[-1],
+                "store_path": link.doc_path,
+                "link_id": str(link.id),
+            }
+        )
+    return tree

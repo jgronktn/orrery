@@ -16,9 +16,10 @@ import { FunctionTimeline } from "./FunctionTimeline";
 import { AskBar, RailAccordion } from "./RightRail";
 import { Shell } from "./Shell";
 import { accentOf } from "./theme";
-import { isActivity, nodeStorePath } from "./timelineScale";
+import { isActivity, nodeStorePath, todayISO } from "./timelineScale";
 import {
   CanvasAccordion,
+  AddItemForm,
   Composer,
   Conversation,
   DetailPanel,
@@ -48,7 +49,9 @@ export default function FunctionStream() {
   // Composer: which kind icon is armed + the title/date being entered.
   const [addKind, setAddKind] = useState<string | null>(null);
   const [addTitle, setAddTitle] = useState("");
+  const [addDetails, setAddDetails] = useState("");
   const [addDue, setAddDue] = useState("");
+  const [addBusy, setAddBusy] = useState(false);
   // Filesystem panel (below the timeline) + open-file preview.
   const [folders, setFolders] = useState<string[]>([]);
   const [reloadToken, setReloadToken] = useState(0);
@@ -57,6 +60,8 @@ export default function FunctionStream() {
   const [revealTime, setRevealTime] = useState<number | null>(null);
   // Transient confirmation banner (e.g. after a drop). Auto-clears.
   const [notice, setNotice] = useState<string | null>(null);
+  // A file currently uploading (its name) — sticky banner while the POST runs.
+  const [uploading, setUploading] = useState<string | null>(null);
 
   const loadTimeline = useCallback(() => {
     api.functionTimeline(key).then(setNodes).catch(() => undefined);
@@ -141,6 +146,7 @@ export default function FunctionStream() {
   const fail = (e: unknown) => setErr(e instanceof ApiError ? e.message : String(e));
 
   const onDropFile = async (file: File) => {
+    setUploading(file.name);
     try {
       const node = await api.uploadFunctionDoc(key, file);
       refreshFiles();
@@ -157,31 +163,45 @@ export default function FunctionStream() {
       );
     } catch (e) {
       fail(e);
+    } finally {
+      setUploading(null);
     }
   };
-  const onAddTask = async (title: string, kind: string, due: string | null) => {
+  const onAddTask = async (
+    title: string,
+    kind: string,
+    due: string | null,
+    description: string | null,
+  ) => {
     if (!streamId) return;
     try {
-      await api.createTask(streamId, { title, kind, due_date: due });
+      await api.createTask(streamId, { title, kind, due_date: due, description });
       loadTimeline();
     } catch (e) {
       fail(e);
     }
   };
-  const submitAdd = () => {
-    const t = addTitle.trim();
-    if (!t || !addKind || !streamId) return;
-    void onAddTask(t, addKind, addDue || null);
+  const clearAdd = () => {
     setAddKind(null);
     setAddTitle("");
+    setAddDetails("");
     setAddDue("");
   };
+  const submitAdd = async () => {
+    const t = addTitle.trim();
+    if (!t || !addKind || !streamId) return;
+    setAddBusy(true);
+    await onAddTask(t, addKind, addDue || null, addDetails.trim() || null);
+    setAddBusy(false);
+    clearAdd();
+  };
   // A kind icon dropped onto the timeline → arm that kind, dated at the drop
-  // position (UTC day), and focus the title field to name it.
+  // position (UTC day); the sidebar form opens to name it.
   const onDropKind = (kind: string, timeMs: number) => {
     if (!streamId) return;
     setAddKind(kind);
     setAddTitle("");
+    setAddDetails("");
     setAddDue(new Date(timeMs).toISOString().slice(0, 10));
   };
   const onSetNote = async (node: TimelineNode, note: string | null) => {
@@ -318,18 +338,13 @@ export default function FunctionStream() {
         <Composer
           compact
           kind={addKind}
-          title={addTitle}
-          due={addDue}
           disabled={!streamId}
           onChoose={(k) => {
-            setAddKind((cur) => (cur === k ? null : k));
             setAddTitle("");
-            setAddDue("");
+            setAddDetails("");
+            setAddDue(todayISO());
+            setAddKind((cur) => (cur === k ? null : k));
           }}
-          onTitle={setAddTitle}
-          onDue={setAddDue}
-          onSubmit={submitAdd}
-          onCancel={() => setAddKind(null)}
         />
       }
     >
@@ -339,7 +354,13 @@ export default function FunctionStream() {
             {err}
           </div>
         )}
-        {notice && (
+        {uploading && (
+          <div className="flex items-center gap-2 border-b border-line bg-[#e8edf1] px-6 py-2 text-[12px] text-[#3c5670]">
+            <span className="h-2 w-2 animate-orrery-pulse rounded-full bg-[#50708a]" />
+            Uploading “{uploading}”…
+          </div>
+        )}
+        {notice && !uploading && (
           <div className="border-b border-line bg-[#e8edf1] px-6 py-2 text-[12px] text-[#3c5670]">
             {notice}
           </div>
@@ -353,7 +374,12 @@ export default function FunctionStream() {
               accent={accent}
               selectedId={current?.id ?? null}
               focusTime={focusNode?.time ?? revealTime}
-              onSelect={(n) => setSelectedId(n ? n.id : null)}
+              onSelect={(n) => {
+                setSelectedId(n ? n.id : null);
+                // Selecting on the timeline drives the tree highlight; clear a
+                // stale open-file preview so it doesn't keep winning activePath.
+                if (n) setPreview(null);
+              }}
               onDropFile={(f) => void onDropFile(f)}
               onDropKind={onDropKind}
             />
@@ -371,7 +397,14 @@ export default function FunctionStream() {
                 accent={accent}
                 rootPrefix={fn?.folder ?? key}
                 loadTree={() => api.functionTree(key)}
-                upload={(file, dir) => api.uploadFunctionDoc(key, file, dir)}
+                upload={async (file, dir) => {
+                  setUploading(file.name);
+                  try {
+                    return await api.uploadFunctionDoc(key, file, dir);
+                  } finally {
+                    setUploading(null);
+                  }
+                }}
                 folders={folders}
                 reloadToken={reloadToken}
                 onOpenFile={setPreview}
@@ -434,6 +467,20 @@ export default function FunctionStream() {
           {/* right sidebar — starts below the timeline: selected item's detail
               (else pending approvals), over the agent ask */}
           <aside className="flex w-[25%] min-w-[300px] flex-col border-l border-line bg-[#f1f1ef]">
+          {addKind && (
+            <AddItemForm
+              kind={addKind}
+              title={addTitle}
+              details={addDetails}
+              due={addDue}
+              busy={addBusy}
+              onTitle={setAddTitle}
+              onDetails={setAddDetails}
+              onDue={setAddDue}
+              onSave={() => void submitAdd()}
+              onCancel={clearAdd}
+            />
+          )}
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
             {current ? (
               <DetailPanel

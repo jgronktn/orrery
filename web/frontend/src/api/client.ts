@@ -24,6 +24,8 @@ export type SearchHit = components["schemas"]["SearchHit"];
 export type FileOpResult = components["schemas"]["FileOpResult"];
 export type TaskDoc = components["schemas"]["TaskDocOut"];
 export type ContainerFile = components["schemas"]["ContainerFile"];
+export type ProjectDocLink = components["schemas"]["ProjectDocLinkOut"];
+export type LinkFolder = components["schemas"]["LinkFolderOut"];
 export type Home = components["schemas"]["HomeOut"];
 export type FunctionInfo = components["schemas"]["FunctionOut"];
 export type Company = components["schemas"]["CompanyOut"];
@@ -146,7 +148,12 @@ export const api = {
     request<Task[]>(`/api/projects/${projectId}/tasks`),
   createTask: (
     projectId: string,
-    body: { title: string; due_date?: string | null; kind?: string },
+    body: {
+      title: string;
+      due_date?: string | null;
+      kind?: string;
+      description?: string | null;
+    },
   ) =>
     request<Task>(`/api/projects/${projectId}/tasks`, {
       method: "POST",
@@ -268,6 +275,39 @@ export const api = {
       `/api/projects/${projectId}/folders?path=${encodeURIComponent(path)}`,
       { method: "DELETE" },
     ),
+
+  // Spec linking: reference function-corpus files into a project (no copy).
+  listProjectLinks: (projectId: string) =>
+    request<ProjectDocLink[]>(`/api/projects/${projectId}/links`),
+  linkProjectDoc: (projectId: string, path: string, targetDir?: string) =>
+    request<ProjectDocLink>(`/api/projects/${projectId}/links`, {
+      method: "POST",
+      body: JSON.stringify({ path, target_dir: targetDir ?? null }),
+    }),
+  unlinkProjectDoc: (projectId: string, linkId: string) =>
+    request<void>(`/api/projects/${projectId}/links/${linkId}`, {
+      method: "DELETE",
+    }),
+  listLinkFolders: (projectId: string) =>
+    request<LinkFolder[]>(`/api/projects/${projectId}/link-folders`),
+  createLinkFolder: (
+    projectId: string,
+    folderPath: string,
+    destFunction: string,
+    destDir: string,
+  ) =>
+    request<LinkFolder>(`/api/projects/${projectId}/link-folders`, {
+      method: "POST",
+      body: JSON.stringify({
+        folder_path: folderPath,
+        dest_function: destFunction,
+        dest_dir: destDir,
+      }),
+    }),
+  deleteLinkFolder: (projectId: string, folderId: string) =>
+    request<void>(`/api/projects/${projectId}/link-folders/${folderId}`, {
+      method: "DELETE",
+    }),
   deleteDocument: (projectId: string, documentId: string) =>
     request<void>(`/api/projects/${projectId}/documents/${documentId}`, {
       method: "DELETE",

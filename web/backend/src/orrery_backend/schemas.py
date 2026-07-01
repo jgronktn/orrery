@@ -182,6 +182,33 @@ class TaskDocLinkIn(BaseModel):
     path: str
 
 
+class ProjectDocLinkIn(BaseModel):
+    path: str  # source function-corpus file, FILES_ROOT-relative
+    target_dir: str | None = None  # project folder the shortcut shows in (default: root)
+
+
+class ProjectDocLinkOut(BaseModel):
+    id: uuid.UUID
+    path: str  # source file, FILES_ROOT-relative
+    name: str
+    type: str
+    function: str  # registry key of the source corpus
+    target_dir: str
+
+
+class LinkFolderIn(BaseModel):
+    folder_path: str  # project portal folder, FILES_ROOT-relative
+    dest_function: str  # registry key, e.g. "engr"
+    dest_dir: str  # function-corpus destination, FILES_ROOT-relative
+
+
+class LinkFolderOut(BaseModel):
+    id: uuid.UUID
+    folder_path: str
+    dest_function: str
+    dest_dir: str
+
+
 class SearchHit(BaseModel):
     id: uuid.UUID
     path: str
@@ -216,6 +243,12 @@ class FsTreeNode(BaseModel):
     name: str
     children: "list[FsTreeNode] | None" = None
     store_path: str | None = None  # FILES_ROOT-relative path (files only)
+    # Linking (spec references): a leaf with `link_id` is a shortcut to a
+    # function-corpus file (store_path is the SOURCE path); a folder with
+    # `link_folder` is a portal whose drops route to `link_dest`.
+    link_id: str | None = None
+    link_folder: bool = False
+    link_dest: str | None = None  # "function-folder" the portal routes to
 
 
 class TimelineNode(BaseModel):

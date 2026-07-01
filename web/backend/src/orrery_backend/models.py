@@ -170,6 +170,10 @@ class Task(Base):
     synthesized: Mapped[str] = mapped_column(
         String(20), default="pending", server_default="pending"
     )
+    # Id of this item's point in the `learnings` KB collection, so timeline
+    # items are agent-searchable via search_kb. Set on create, re-synced on
+    # edit, deleted with the item. NULL for un-indexed/legacy rows.
+    kb_point_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     owner_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id"), nullable=True
     )
@@ -377,6 +381,58 @@ class Catalog(Base):
     # `source_activity_ids[]` linking back to the activity that produced them.
     synthesized: Mapped[str] = mapped_column(
         String(20), default="pending", server_default="pending"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class ProjectDocumentLink(Base):
+    """A reference link: a function-corpus file surfaced inside a project's
+    folder tree as a shortcut, WITHOUT copying the file. `doc_path` is the
+    source file (FILES_ROOT-relative, unique in `catalog`); `target_dir` is the
+    project folder the shortcut appears in. One link per (project, doc_path)."""
+
+    __tablename__ = "project_document_links"
+    __table_args__ = (
+        UniqueConstraint("project_id", "doc_path", name="uq_proj_doc_link"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(SAUuid, primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
+    doc_path: Mapped[str] = mapped_column(String(700))  # source file, rel to FILES_ROOT
+    target_dir: Mapped[str] = mapped_column(String(700))  # project folder the shortcut shows in
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class ProjectLinkFolder(Base):
+    """A project folder designated as a "link folder" portal: a file dropped
+    into `folder_path` is written into a function corpus
+    (`dest_function`/`dest_dir`) instead of the project, and a
+    ProjectDocumentLink shortcut is left behind. One portal per
+    (project, folder_path)."""
+
+    __tablename__ = "project_link_folders"
+    __table_args__ = (
+        UniqueConstraint("project_id", "folder_path", name="uq_proj_link_folder"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(SAUuid, primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
+    folder_path: Mapped[str] = mapped_column(String(700))  # project portal folder, rel to FILES_ROOT
+    dest_function: Mapped[str] = mapped_column(String(50))  # registry key, e.g. "engr"
+    dest_dir: Mapped[str] = mapped_column(String(700))  # function-corpus destination, rel to FILES_ROOT
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

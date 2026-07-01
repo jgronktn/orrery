@@ -17,6 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
 
 from . import functions, projectstore
+from .activities import index_task_kb
 from .db import get_db
 from .models import Project, ProjectAgent, Task, TaskDocument, User
 from .schemas import (
@@ -114,6 +115,8 @@ def create_task(
     db.add(task)
     db.commit()
     db.refresh(task)
+    index_task_kb(task, container_name=ctx.project.name)  # → agent-searchable
+    db.commit()
     return task
 
 
@@ -133,13 +136,18 @@ def update_task(
 ) -> Task:
     task = _get_project_task(db, ctx, task_id)
     changed = False
+    text_changed = False
     for field in ("title", "description", "status", "owner_id", "due_date", "kind", "facet"):
         value = getattr(body, field)
         if value is not None:
             setattr(task, field, value)
             changed = True
+            if field in ("title", "description", "kind"):
+                text_changed = True
     if changed:
         task.synthesized = "pending"  # edited → re-digest next synthesis pass
+    if text_changed:
+        index_task_kb(task, container_name=ctx.project.name)  # keep the KB in sync
     db.commit()
     db.refresh(task)
     return task

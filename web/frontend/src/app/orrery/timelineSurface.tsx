@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { api, type Message, type TimelineNode } from "../../api/client";
+import { ThinkingLabel } from "./ThinkingLabel";
 import { daysFromNow, fmtClock, fmtDateY, typeLabel } from "./timelineScale";
 
 // Shared pieces of the activity-timeline surface, used by both the Function
@@ -14,35 +15,28 @@ export const KINDS = [
   { value: "milestone", label: "Milestone", color: "#2b2a26" },
   { value: "reminder", label: "Reminder", color: "#a86676" },
   { value: "note", label: "Note", color: "#66707f" },
+  { value: "decision", label: "Decision", color: "#4f8073" },
 ] as const;
 
-// Display order in the composer: Note · Reminder · Action item · Milestone.
-const CHIPS = [KINDS[3], KINDS[2], KINDS[0], KINDS[1]];
+// Display order in the composer: Note · Decision · Reminder · Action item · Milestone.
+const CHIPS = ["note", "decision", "reminder", "task", "milestone"].map(
+  (v) => KINDS.find((k) => k.value === v)!,
+);
 
+// The kind chips (Note · Decision · Reminder · Action item · Milestone). Click a
+// chip to open the detail form in the right sidebar, or drag it onto the
+// timeline to place it at a date. `kind` highlights the one being composed.
 export function Composer({
   kind,
-  title,
-  due,
   disabled,
   compact,
   onChoose,
-  onTitle,
-  onDue,
-  onSubmit,
-  onCancel,
 }: {
   kind: string | null;
-  title: string;
-  due: string;
   disabled: boolean;
   compact?: boolean;
   onChoose: (k: string) => void;
-  onTitle: (v: string) => void;
-  onDue: (v: string) => void;
-  onSubmit: () => void;
-  onCancel: () => void;
 }) {
-  const active = KINDS.find((k) => k.value === kind) ?? null;
   return (
     <div
       className={
@@ -56,7 +50,7 @@ export function Composer({
         return (
           <button
             key={k.value}
-            title="Drag onto the timeline, or click to add at today"
+            title="Drag onto the timeline, or click to add details"
             draggable={!disabled}
             onDragStart={(e) => {
               e.dataTransfer.setData("application/x-orrery-kind", k.value);
@@ -93,49 +87,98 @@ export function Composer({
           </button>
         );
       })}
+    </div>
+  );
+}
 
-      {active && (
+// The detail form for a new timeline item, shown in the right sidebar when a
+// kind chip is clicked (or a chip is dropped on the timeline). Collects a
+// title + optional details (→ description, indexed into the KB) + a date.
+export function AddItemForm({
+  kind,
+  title,
+  details,
+  due,
+  busy,
+  onTitle,
+  onDetails,
+  onDue,
+  onSave,
+  onCancel,
+}: {
+  kind: string;
+  title: string;
+  details: string;
+  due: string;
+  busy?: boolean;
+  onTitle: (v: string) => void;
+  onDetails: (v: string) => void;
+  onDue: (v: string) => void;
+  onSave: () => void;
+  onCancel: () => void;
+}) {
+  const meta = KINDS.find((k) => k.value === kind);
+  const label = meta?.label ?? "item";
+  const color = meta?.color ?? "#50708a";
+  return (
+    <div className="border-b border-line bg-[#f1f1ef]">
+      <div className="flex h-[50px] items-center gap-2 border-b border-[#f8f8f6] bg-[#e8e8e4] px-5">
+        <span style={{ color }}>
+          <span className="[&>svg]:h-[18px] [&>svg]:w-[18px]">
+            <KindGlyph value={kind} />
+          </span>
+        </span>
+        <span className="text-[13px] font-semibold uppercase tracking-[0.08em] text-muted">
+          New {label}
+        </span>
+        <button
+          onClick={onCancel}
+          aria-label="Cancel"
+          className="ml-auto grid h-[25px] w-[25px] shrink-0 cursor-pointer place-items-center rounded-full border bg-transparent text-[14px] leading-none text-ink/55 hover:text-[#8a4a3c]"
+          style={{ borderColor: `${color}80` }}
+        >
+          ✕
+        </button>
+      </div>
+      <div className="flex flex-col gap-2 px-4 py-3">
+        <input
+          autoFocus
+          value={title}
+          onChange={(e) => onTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") onSave();
+            else if (e.key === "Escape") onCancel();
+          }}
+          placeholder="Title"
+          className="rounded-lg border border-line-soft bg-white px-3 py-2 text-[13px] text-ink outline-none placeholder:text-hint"
+        />
+        <textarea
+          value={details}
+          rows={6}
+          onChange={(e) => onDetails(e.target.value)}
+          placeholder="Details (optional) — captured as searchable knowledge"
+          className="resize-none rounded-lg border border-line-soft bg-white px-3 py-2 text-[12.5px] leading-relaxed text-ink outline-none placeholder:text-hint"
+        />
         <div className="flex items-center gap-2">
-          <input
-            autoFocus
-            value={title}
-            onChange={(e) => onTitle(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") onSubmit();
-              else if (e.key === "Escape") onCancel();
-            }}
-            placeholder={`New ${active.label.toLowerCase()}…`}
-            className={
-              compact
-                ? "w-44 rounded-lg border border-line-soft bg-white px-2 py-1 text-[12px] text-ink outline-none placeholder:text-hint"
-                : "w-72 rounded-lg border border-line-soft bg-white px-3 py-1.5 text-[13px] text-ink outline-none placeholder:text-hint"
-            }
-          />
           <input
             type="date"
             value={due}
             onChange={(e) => onDue(e.target.value)}
             title="Date (defaults to today)"
-            className={
-              compact
-                ? "rounded-lg border border-line-soft bg-white px-1.5 py-1 text-[11.5px] text-strong outline-none"
-                : "rounded-lg border border-line-soft bg-white px-2 py-1.5 text-[12.5px] text-strong outline-none"
-            }
+            className="rounded-lg border border-line-soft bg-white px-2 py-1.5 text-[12px] text-strong outline-none"
           />
           <button
-            onClick={onCancel}
-            title="Cancel"
-            aria-label="Cancel"
-            className={
-              compact
-                ? "grid h-7 w-7 place-items-center rounded-full border border-line-soft bg-white text-[12px] text-hint hover:bg-rowhover hover:text-strong"
-                : "grid h-8 w-8 place-items-center rounded-full border border-line-soft bg-white text-[13px] text-hint hover:bg-rowhover hover:text-strong"
-            }
+            onClick={onSave}
+            disabled={!title.trim() || busy}
+            className="ml-auto flex items-center gap-1.5 rounded-lg bg-ink px-3 py-1.5 text-[12px] text-[#f6f4ef] hover:bg-ink-soft disabled:opacity-50"
           >
-            ✕
+            {busy ? (
+              <span className="h-2 w-2 animate-orrery-pulse rounded-full bg-[#f6f4ef]" />
+            ) : null}
+            Save
           </button>
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -176,6 +219,15 @@ export function KindGlyph({ value }: { value: string }) {
         />
         <path d="M9.5 2v3h3" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
         <path d="M5.5 8h5M5.5 10.5h5" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (value === "decision") {
+    // a flowchart-style diamond with a check inside
+    return (
+      <svg width="32" height="32" viewBox="0 0 16 16" aria-hidden>
+        <path d="M8 2l6 6-6 6-6-6z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+        <path d="M5.6 8l1.6 1.6L10.8 6" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     );
   }
@@ -230,6 +282,13 @@ export function TypeGlyph({ type, size = 16 }: { type: string; size?: number }) 
           <path d="M3.5 2h6l3 3v9h-9z" />
           <path d="M9.5 2v3h3" />
           <path d="M5.5 8.5h5M5.5 11h3" />
+        </svg>
+      );
+    case "decision":
+      return (
+        <svg {...props}>
+          <path d="M8 2l6 6-6 6-6-6z" />
+          <path d="M5.6 8l1.6 1.6L10.8 6" />
         </svg>
       );
     case "email":
@@ -287,7 +346,7 @@ export function AskAnswer({
         {busy && !answer ? (
           <div className="flex items-center gap-2 text-[13px] text-hint">
             <span className="h-2 w-2 animate-orrery-pulse rounded-full" style={{ background: accent }} />
-            Thinking…
+            <ThinkingLabel />
           </div>
         ) : (
           <div className="max-w-[760px] text-[14px] leading-relaxed text-strong [&_a]:underline [&_h1]:mt-3 [&_h1]:font-semibold [&_h2]:mt-3 [&_h2]:font-semibold [&_li]:ml-4 [&_li]:list-disc [&_p]:my-1.5">
@@ -392,7 +451,7 @@ export function Conversation({
         {busy && (
           <div className="flex items-center gap-2 text-[13px] text-hint">
             <span className="h-2 w-2 animate-orrery-pulse rounded-full" style={{ background: accent }} />
-            Thinking…
+            <ThinkingLabel agentName={agentName} />
           </div>
         )}
       </div>
