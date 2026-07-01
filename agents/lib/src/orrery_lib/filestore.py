@@ -19,6 +19,7 @@ import io
 import os
 import re
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -36,6 +37,16 @@ _XLSX_EXT = {".xlsx"}
 _ODT_EXT = {".odt"}
 _EML_EXT = {".eml"}
 _SNIPPET_CHARS = 240
+
+# search_files greps the body of only the cheap-to-read text formats. PDFs and
+# Office docs match on filename — their body text is served by the semantic
+# index (search_docs), which is built once at ingestion. This keeps a keyword
+# search from re-extracting every PDF (pdfplumber, page by page) on every call,
+# which turned a whole-corpus search into a multi-minute crawl.
+_SEARCH_CONTENT_EXT = _TEXT_EXT | _EML_EXT
+# Backstop so a pathological corpus can never stall a request.
+_SEARCH_TIME_BUDGET_S = 8.0
+_SEARCH_MAX_FILES = 4000
 
 # Skipped when listing/searching a directory (VCS + placeholder noise).
 _DIR_SKIP = {".git", ".gitkeep", ".DS_Store"}
@@ -232,17 +243,24 @@ def _snippet(text: str, terms: list[str]) -> str:
 
 def search(root: Path, query: str, k: int = 5) -> list[FileHit]:
     """Filename + text-content search. All query terms must appear in the
-    filename or the file's extracted text. Filename matches rank higher.
-    PDFs/binaries match on filename only."""
+    filename or — for cheap text formats (Markdown/txt/csv/eml) — the file's
+    text. Filename matches rank higher. PDFs/Office docs match on filename only;
+    their body is searchable via the semantic index (search_docs), so a keyword
+    search never re-extracts every PDF. Bounded by a time + file-count budget."""
     terms = [t for t in query.lower().split() if t]
     if not terms or not root.exists():
         return []
+    deadline = time.monotonic() + _SEARCH_TIME_BUDGET_S
     scored: list[tuple[int, FileHit]] = []
+    scanned = 0
     for p in root.rglob("*"):
         if not p.is_file() or p.name == ".gitkeep":
             continue
+        scanned += 1
+        if scanned > _SEARCH_MAX_FILES or time.monotonic() > deadline:
+            break
         name_l = p.name.lower()
-        text = extract_text(p)
+        text = extract_text(p) if p.suffix.lower() in _SEARCH_CONTENT_EXT else None
         haystack = name_l + "\n" + (text.lower() if text else "")
         if not all(t in haystack for t in terms):
             continue
