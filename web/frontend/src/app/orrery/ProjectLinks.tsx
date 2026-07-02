@@ -8,23 +8,21 @@ import {
   type LinkFolder,
 } from "../../api/client";
 
-// The two ways to reference a function-corpus spec into a project (no copy):
-//   • "Link a spec"  — pick an existing function file → shortcut in a folder.
-//   • "Link folder"  — designate a project folder as a portal; drops route to
-//                       a function folder, leaving a shortcut behind.
-// Rendered as a compact bar above the project file tree. `onChanged` refreshes
-// the tree after any link/portal change.
+// Link a function-corpus file into a project (no copy). Two ways:
+//   • "Link File"   — pick an Engineering file → shortcut in a project folder.
+//   • "Link Folder" — designate a project folder as a portal; drops route to a
+//                     function folder, leaving a shortcut behind.
+// Rendered as a footer below the project file tree. `onChanged` refreshes the
+// tree after any link/portal change.
 export function LinkControls({
   projectId,
   slug,
   projectFolders,
-  accent,
   onChanged,
 }: {
   projectId: string;
   slug: string;
   projectFolders: string[];
-  accent: string;
   onChanged: () => void;
 }) {
   const [fns, setFns] = useState<FunctionInfo[]>([]);
@@ -40,31 +38,62 @@ export function LinkControls({
   const fail = (e: unknown) =>
     setErr(e instanceof ApiError ? e.message : "Something went wrong");
 
-  const btn =
-    "rounded-sm border border-line-soft bg-white px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-strong-alt hover:bg-rowhover";
+  // Steel circle-icon buttons, matching the New-folder / timeline controls.
+  const linkBtn =
+    "flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap font-mono text-[10px] uppercase text-[#50708a] hover:opacity-75";
+  const circle =
+    "grid h-6 w-6 place-items-center rounded-full border-2 border-[#50708a] bg-transparent";
 
   return (
-    <div className="border-b border-line bg-paper-alt px-2 py-1.5">
-      <div className="flex items-center gap-1.5">
+    <div className="border-t border-line bg-paper-alt px-3 py-2">
+      <div className="flex items-center gap-4">
         <button
-          className={btn}
-          style={panel === "spec" ? { color: accent, borderColor: accent } : undefined}
+          className={linkBtn}
           onClick={() => {
             setErr(null);
             setPanel((p) => (p === "spec" ? null : "spec"));
           }}
         >
-          ↗ Link a spec
+          <span className={circle}>
+            <svg
+              width="11"
+              height="11"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="#50708a"
+              strokeWidth={2.3}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <path d="M4.7 11.3L11.3 4.7" />
+              <path d="M4.7 4.7H11.3V11.3" />
+            </svg>
+          </span>
+          Link File
         </button>
         <button
-          className={btn}
-          style={panel === "folder" ? { color: accent, borderColor: accent } : undefined}
+          className={linkBtn}
           onClick={() => {
             setErr(null);
             setPanel((p) => (p === "folder" ? null : "folder"));
           }}
         >
-          ＋ Link folder
+          <span className={circle}>
+            <svg
+              width="11"
+              height="11"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="#50708a"
+              strokeWidth={2.3}
+              strokeLinecap="round"
+              aria-hidden
+            >
+              <path d="M8 2.6v10.8M2.6 8h10.8" />
+            </svg>
+          </span>
+          Link Folder
         </button>
       </div>
       {err && <p className="mt-1 text-[11px] text-rose-600">{err}</p>}
@@ -96,11 +125,11 @@ export function LinkControls({
 }
 
 const sel =
-  "min-w-0 flex-1 rounded-sm border border-line-soft bg-white px-1 py-0.5 text-[11.5px] text-ink outline-none";
+  "min-w-0 flex-1 rounded-sm border border-line-soft bg-white px-1.5 py-3 text-[11.5px] text-ink outline-none";
 const row = "mt-1.5 flex items-center gap-1.5";
 const lbl = "w-16 shrink-0 font-mono text-[9.5px] uppercase tracking-wide text-muted";
 const go =
-  "rounded-sm bg-ink px-2 py-0.5 text-[11px] text-[#f6f4ef] hover:bg-ink-soft disabled:opacity-40";
+  "rounded-sm bg-ink px-2.5 py-3 text-[11px] text-[#f6f4ef] hover:bg-ink-soft disabled:opacity-40";
 
 function SpecPicker({
   projectId,
@@ -117,26 +146,23 @@ function SpecPicker({
   onError: (e: unknown) => void;
   onDone: () => void;
 }) {
-  const [fnKey, setFnKey] = useState("");
   const [files, setFiles] = useState<ContainerFile[]>([]);
   const [path, setPath] = useState("");
   const [dir, setDir] = useState("");
   const [busy, setBusy] = useState(false);
 
-  // Default to the first function that has a stream, then load its files.
+  // A project is always associated with the Engineering function — link files
+  // from the engineering corpus (no function to choose).
+  const engr = fns.find((f) => f.key === "engr");
   useEffect(() => {
-    if (!fnKey && fns[0]) setFnKey(fns[0].key);
-  }, [fns, fnKey]);
-  useEffect(() => {
-    const fn = fns.find((f) => f.key === fnKey);
-    if (!fn) return;
+    if (!engr) return;
     setFiles([]);
     setPath("");
     api
-      .listContainerFiles(fn.stream_id)
+      .listContainerFiles(engr.stream_id)
       .then(setFiles)
       .catch(() => undefined);
-  }, [fnKey, fns]);
+  }, [engr?.stream_id]);
 
   const link = async () => {
     if (!path) return;
@@ -154,17 +180,7 @@ function SpecPicker({
   return (
     <div className="mt-1.5 rounded-sm border border-line-soft bg-white/60 p-1.5">
       <div className={row.replace("mt-1.5 ", "")}>
-        <span className={lbl}>From</span>
-        <select className={sel} value={fnKey} onChange={(e) => setFnKey(e.target.value)}>
-          {fns.map((f) => (
-            <option key={f.key} value={f.key}>
-              {f.name}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className={row}>
-        <span className={lbl}>Spec</span>
+        <span className={lbl}>File</span>
         <select className={sel} value={path} onChange={(e) => setPath(e.target.value)}>
           <option value="">{files.length ? "Choose a file…" : "No files"}</option>
           {files.map((f) => (
@@ -208,11 +224,13 @@ function FolderPicker({
   onChanged: () => void;
 }) {
   const [folderRel, setFolderRel] = useState("");
-  const [fnKey, setFnKey] = useState("");
   const [destDirs, setDestDirs] = useState<string[]>([]);
   const [destRel, setDestRel] = useState("");
   const [busy, setBusy] = useState(false);
   const [portals, setPortals] = useState<LinkFolder[]>([]);
+
+  // A project portal always routes to its Engineering function (no choice).
+  const engFolder = fns.find((f) => f.key === "engr")?.folder ?? "engineering";
 
   const reloadPortals = () =>
     api.listLinkFolders(projectId).then(setPortals).catch(() => undefined);
@@ -220,19 +238,11 @@ function FolderPicker({
     void reloadPortals();
   }, [projectId]);
   useEffect(() => {
-    if (!fnKey && fns[0]) setFnKey(fns[0].key);
-  }, [fns, fnKey]);
-  useEffect(() => {
-    if (!fnKey) return;
-    setDestDirs([]);
-    setDestRel("");
     api
-      .functionFolders(fnKey)
+      .functionFolders("engr")
       .then(setDestDirs)
       .catch(() => undefined);
-  }, [fnKey]);
-
-  const fnFolder = (key: string) => fns.find((f) => f.key === key)?.folder ?? key;
+  }, []);
 
   const create = async () => {
     if (!folderRel || !destRel) return;
@@ -241,8 +251,8 @@ function FolderPicker({
       await api.createLinkFolder(
         projectId,
         fullProj(folderRel),
-        fnKey,
-        `${fnFolder(fnKey)}/${destRel}`,
+        "engr",
+        `${engFolder}/${destRel}`,
       );
       await reloadPortals();
       onChanged();
@@ -278,13 +288,7 @@ function FolderPicker({
       </div>
       <div className={row}>
         <span className={lbl}>Routes to</span>
-        <select className={sel} value={fnKey} onChange={(e) => setFnKey(e.target.value)}>
-          {fns.map((f) => (
-            <option key={f.key} value={f.key}>
-              {f.name}
-            </option>
-          ))}
-        </select>
+        <span className="shrink-0 font-mono text-[10px] text-muted">{engFolder}/</span>
         <select className={sel} value={destRel} onChange={(e) => setDestRel(e.target.value)}>
           <option value="">folder…</option>
           {destDirs.map((d) => (

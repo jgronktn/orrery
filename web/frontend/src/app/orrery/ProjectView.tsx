@@ -370,13 +370,6 @@ export default function ProjectView() {
             <div className="flex w-[35%] min-w-0 flex-col border-r border-line">
               {project && (
                 <>
-                  <LinkControls
-                    projectId={id}
-                    slug={project.slug}
-                    projectFolders={folders}
-                    accent={accent}
-                    onChanged={() => setReloadToken((n) => n + 1)}
-                  />
                   <div className="flex min-h-0 flex-1">
                     <FunctionFiles
                       variant="fill"
@@ -408,6 +401,12 @@ export default function ProjectView() {
                       onUnlink={onUnlink}
                     />
                   </div>
+                  <LinkControls
+                    projectId={id}
+                    slug={project.slug}
+                    projectFolders={folders}
+                    onChanged={() => setReloadToken((n) => n + 1)}
+                  />
                 </>
               )}
             </div>
