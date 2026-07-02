@@ -37,6 +37,20 @@ from .agent import EngineeringDeps, _join_text, build_agent
 from .fetch import fetch_to_drafts
 
 
+def _with_linked_note(query: str, linked: list[dict]) -> str:
+    """Prepend a note listing the project's linked files so the agent treats
+    them as project materials (reading them by their real path when relevant)."""
+    if not linked:
+        return query
+    lines = "\n".join(f"- {lf['path']}" for lf in linked)
+    return (
+        "[Project context] These files are linked into this project — treat "
+        "them as part of the project's materials. Read them with read_file when "
+        "relevant, and cite their real path:\n"
+        f"{lines}\n\n{query}"
+    )
+
+
 def _to_message_history(turns: list[ConversationTurn]):
     """Rebuild PydanticAI message history from the backend's plain turns."""
     history = []
@@ -58,10 +72,17 @@ async def run_once(req: AgentRequest) -> AgentResponse:
     # files + emails live) plus the engineering corpus. Outside a project the
     # folder is absent, so the reader is engineering-only.
     folder = (req.project_context or {}).get("folder")
-    reader = build_reader([folder] if folder else [])
+    linked = (req.project_context or {}).get("linked_files") or []
+    # Widen the reader with the specific files linked into this project — they
+    # may live in another function's corpus — so read_file can reach them.
+    reader = build_reader(
+        [folder] if folder else [],
+        extra_paths=[lf["path"] for lf in linked],
+    )
     deps = EngineeringDeps(files=reader, backend=backend)
     agent = build_agent()
     history = _to_message_history(req.conversation_history)
+    query = _with_linked_note(req.query, linked)
 
     # One span per agent run, carrying Orrery domain attributes; the PydanticAI
     # spans (loop, tokens, tool calls) nest underneath it.
@@ -72,7 +93,7 @@ async def run_once(req: AgentRequest) -> AgentResponse:
         request_id=req.request_id,
     ) as span:
         result = await agent.run(
-            req.query, deps=deps, message_history=history or None
+            query, deps=deps, message_history=history or None
         )
         text = _join_text(result.new_messages()) or result.output
 

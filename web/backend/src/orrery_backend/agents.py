@@ -28,9 +28,11 @@ from .config import settings
 from .db import get_db
 from .governance import classify, execute_proposal
 from .models import (
+    Catalog,
     Conversation,
     Message,
     Project,
+    ProjectDocumentLink,
     ProposalRecord,
     User,
 )
@@ -160,6 +162,27 @@ async def send_message(
             # live) rather than only the engineering corpus.
             "folder": _container_rel_root(project) if project else None,
         }
+        # Files linked into this project (references to function-corpus files):
+        # give the agent their real paths so it treats them as project context
+        # and can read them, even from another function's corpus. Skip stale
+        # links whose source file is gone from the catalog.
+        if project is not None and project.kind == "project":
+            link_paths = db.scalars(
+                select(ProjectDocumentLink.doc_path).where(
+                    ProjectDocumentLink.project_id == project.id
+                )
+            ).all()
+            if link_paths:
+                existing = set(
+                    db.scalars(select(Catalog.path).where(Catalog.path.in_(link_paths)))
+                )
+                linked = [
+                    {"path": p, "name": p.rsplit("/", 1)[-1]}
+                    for p in link_paths
+                    if p in existing
+                ]
+                if linked:
+                    project_context["linked_files"] = linked
         # Mint a short-lived callback token so the agent can reach the
         # /internal/agent API (tasks + research log) for this project.
         token = sign_agent_callback(

@@ -431,17 +431,28 @@ def build_engineering_reader() -> FileStoreReader:
     return FileStoreReader(ENGINEERING_ROOT)
 
 
-def build_reader(folders: list[str]) -> FileStoreReader:
+def build_reader(
+    folders: list[str], extra_paths: list[str] | None = None
+) -> FileStoreReader:
     """Reader over the given FILES_ROOT-relative folders (e.g. a project's
     'projects/<slug>'), always including the engineering corpus. Used per-run
     to scope the agent to the current container's files — where dropped
-    documents and emails land — plus its engineering references."""
+    documents and emails land — plus its engineering references.
+
+    `extra_paths` are individual FILES_ROOT-relative files (e.g. specs linked
+    into a project from another function's corpus) added as read-only roots, so
+    the agent can read exactly those files even when they live outside the
+    scoped folders."""
     roots: list[Path] = []
     for f in folders:
         cleaned = (f or "").strip().strip("/")
         if cleaned:
             roots.append(FILES_ROOT / cleaned)
     roots.append(ENGINEERING_ROOT)
+    for p in extra_paths or []:
+        cleaned = (p or "").strip().strip("/")
+        if cleaned:
+            roots.append(FILES_ROOT / cleaned)
     return FileStoreReader(roots)
 
 
