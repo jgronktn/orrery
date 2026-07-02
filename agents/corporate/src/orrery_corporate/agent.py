@@ -41,6 +41,10 @@ class CorporateDeps:
     files: FileStoreReader
     backend: BackendClient | None = None
     pending_drafts: list[dict] = field(default_factory=list)
+    # Files linked into the current project: {path (real, for reading), name,
+    # target_dir (the project folder they appear in)}. list_directory surfaces
+    # them at their target folder even though they live in a function corpus.
+    linked: list[dict] = field(default_factory=list)
 
 
 def build_agent() -> Agent[CorporateDeps, str]:
@@ -82,17 +86,29 @@ def build_agent() -> Agent[CorporateDeps, str]:
         Pass a folder `path` (e.g. 'corporate', 'projects/condensate-probe',
         'engineering/specs') to list it. Returns each entry's `name`, `type`
         ('dir' or 'file'), and `path` — feed a file path to read_file, or a
-        folder path back into list_directory to go deeper. Read-only.
+        folder path back into list_directory to go deeper. Files LINKED into a
+        project show up here too (name marked "(linked)") — their `path` is the
+        real location in a function corpus; read_file that path. Read-only.
         """
         try:
-            return ctx.deps.files.list_dir(path)
+            entries = ctx.deps.files.list_dir(path)
+            missing = False
         except (FileNotFoundError, NotADirectoryError):
+            entries, missing = [], True
+        except Exception as exc:  # pragma: no cover - surfaced to the model
+            return f"LIST DIRECTORY ERROR: {exc}"
+        norm = (path or "").strip().strip("/")
+        linked_here = [
+            {"name": f"{lf['name']} (linked)", "type": "file", "path": lf["path"]}
+            for lf in ctx.deps.linked
+            if (lf.get("target_dir") or "").strip().strip("/") == norm
+        ]
+        if missing and not linked_here:
             return (
                 f"No folder at '{path}'. It may be a file (use read_file) or "
                 "may not exist — list a parent folder or use search_files."
             )
-        except Exception as exc:  # pragma: no cover - surfaced to the model
-            return f"LIST DIRECTORY ERROR: {exc}"
+        return entries + linked_here
 
     @agent.tool
     async def read_file(ctx: RunContext[CorporateDeps], path: str) -> str:

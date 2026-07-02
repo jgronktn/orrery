@@ -36,6 +36,20 @@ from .agent import CorporateDeps, _join_text, build_agent
 DRAFTS_DIR = "corporate/drafts"
 
 
+def _with_linked_note(query: str, linked: list[dict]) -> str:
+    """Prepend a note listing the project's linked files so the agent treats
+    them as project materials (reading them by their real path when relevant)."""
+    if not linked:
+        return query
+    lines = "\n".join(f"- {lf['path']}" for lf in linked)
+    return (
+        "[Project context] These files are linked into this project — treat "
+        "them as part of the project's materials. Read them with read_file when "
+        "relevant, and cite their real path:\n"
+        f"{lines}\n\n{query}"
+    )
+
+
 def _to_message_history(turns: list[ConversationTurn]):
     history = []
     for turn in turns:
@@ -56,9 +70,11 @@ async def run_once(req: AgentRequest) -> AgentResponse:
     # The executive assistant sees everything — the global reader spans every
     # function folder + all projects. (Scope is intentionally NOT narrowed by
     # the current container.)
-    deps = CorporateDeps(files=build_global_reader(), backend=backend)
+    linked = (req.project_context or {}).get("linked_files") or []
+    deps = CorporateDeps(files=build_global_reader(), backend=backend, linked=linked)
     agent = build_agent()
     history = _to_message_history(req.conversation_history)
+    query = _with_linked_note(req.query, linked)
 
     # One span per agent run, carrying Orrery domain attributes; the PydanticAI
     # spans (loop, tokens, tool calls) nest underneath it.
@@ -68,7 +84,7 @@ async def run_once(req: AgentRequest) -> AgentResponse:
         container=(req.project_context or {}).get("folder"),
         request_id=req.request_id,
     ) as span:
-        result = await agent.run(req.query, deps=deps, message_history=history or None)
+        result = await agent.run(query, deps=deps, message_history=history or None)
         text = _join_text(result.new_messages()) or result.output
 
         proposals = [

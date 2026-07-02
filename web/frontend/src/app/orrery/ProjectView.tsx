@@ -27,7 +27,6 @@ import {
   KINDS,
 } from "./timelineSurface";
 
-const PROJECT_AGENT = "engineering"; // the (only) agent attached to projects today
 
 // A single bounded project: a ~250px activity timeline + composer in the main
 // area, and a 25% right sidebar listing open items over the agent ask. The
@@ -64,6 +63,10 @@ export default function ProjectView() {
   const [uploading, setUploading] = useState<string | null>(null);
 
   const accent = accentOf(project?.function ?? "");
+  // The project's agent = its function's agent: a corporate project talks to
+  // the Executive Assistant, everything else to engineering (the default).
+  const agentId = project?.function === "corp" ? "corporate" : "engineering";
+  const agentName = agentId === "corporate" ? "Executive Assistant" : "Engineering";
 
   const loadTimeline = useCallback(() => {
     api.projectTimeline(id).then(setNodes).catch(() => undefined);
@@ -85,13 +88,14 @@ export default function ProjectView() {
   }, [id]);
   useEffect(() => {
     // Load the persisted conversation (the canvas Conversation pane is always
-    // present; this just fills its history).
+    // present; this just fills its history) for the project's agent.
+    if (!project) return;
     setMessages([]);
     api
-      .getMessages(PROJECT_AGENT, id)
+      .getMessages(agentId, id)
       .then(setMessages)
       .catch(() => undefined);
-  }, [id]);
+  }, [id, agentId, project]);
   useEffect(() => loadTimeline(), [loadTimeline]);
   // Auto-dismiss the transient confirmation banner.
   useEffect(() => {
@@ -279,7 +283,7 @@ export default function ProjectView() {
     setPending(prompt);
     setBusy(true);
     try {
-      const pair = await api.sendMessage(PROJECT_AGENT, { query: prompt, project_id: id });
+      const pair = await api.sendMessage(agentId, { query: prompt, project_id: id });
       setMessages((prev) => [...prev, ...pair]);
       // A turn may have produced proposals / tasks / files — refresh those too.
       loadApprovals();
@@ -293,7 +297,7 @@ export default function ProjectView() {
   };
   const onDeleteTurn = async (ids: string[]) => {
     try {
-      for (const mid of ids) await api.deleteMessage(PROJECT_AGENT, mid);
+      for (const mid of ids) await api.deleteMessage(agentId, mid);
       setMessages((prev) => prev.filter((m) => !ids.includes(m.id)));
     } catch (e) {
       fail(e);
@@ -434,7 +438,7 @@ export default function ProjectView() {
                         <Conversation
                           embedded
                           accent={accent}
-                          agentName="Engineering"
+                          agentName={agentName}
                           messages={messages}
                           pending={pending}
                           busy={busy}
@@ -485,7 +489,7 @@ export default function ProjectView() {
             )}
           </div>
           <AskBar
-            agentName="Engineering"
+            agentName={agentName}
             scopeLabel="Project agent"
             suggestion={`Where does ${project?.name ?? "this project"} stand?`}
             onAsk={(p) => void onAsk(p)}
