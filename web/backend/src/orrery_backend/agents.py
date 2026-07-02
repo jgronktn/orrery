@@ -34,6 +34,7 @@ from .models import (
     Project,
     ProjectDocumentLink,
     ProposalRecord,
+    Task,
     User,
 )
 from .projects import _container_rel_root, get_container
@@ -190,6 +191,20 @@ async def send_message(
                 ]
                 if linked:
                     project_context["linked_files"] = linked
+            # Timeline items (notes / decisions / action items / reminders /
+            # milestones) on this project — so the agent answers about the
+            # project's notes/decisions from these, not the research log or files.
+            task_rows = db.execute(
+                select(Task.kind, Task.title, Task.description)
+                .where(Task.project_id == project.id)
+                .order_by(Task.created_at.desc())
+                .limit(50)
+            ).all()
+            if task_rows:
+                project_context["activities"] = [
+                    {"kind": t.kind, "title": t.title, "description": t.description}
+                    for t in task_rows
+                ]
         # Mint a short-lived callback token so the agent can reach the
         # /internal/agent API (tasks + research log) for this project.
         token = sign_agent_callback(

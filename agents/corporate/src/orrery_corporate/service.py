@@ -36,18 +36,47 @@ from .agent import CorporateDeps, _join_text, build_agent
 DRAFTS_DIR = "corporate/drafts"
 
 
-def _with_linked_note(query: str, linked: list[dict]) -> str:
-    """Prepend a note listing the project's linked files so the agent treats
-    them as project materials (reading them by their real path when relevant)."""
-    if not linked:
+_KIND_LABEL = {
+    "note": "note",
+    "decision": "decision",
+    "task": "action item",
+    "reminder": "reminder",
+    "milestone": "milestone",
+}
+
+
+def _with_project_context(
+    query: str, linked: list[dict], activities: list[dict]
+) -> str:
+    """Prepend a project-context preamble: the project's timeline items
+    (notes/decisions/action items) and its linked files, framed so the agent
+    uses these rather than the research log or documents."""
+    if not linked and not activities:
         return query
-    lines = "\n".join(f"- {lf['path']}" for lf in linked)
-    return (
-        "[Project context] These files are linked into this project — treat "
-        "them as part of the project's materials. Read them with read_file when "
-        "relevant, and cite their real path:\n"
-        f"{lines}\n\n{query}"
-    )
+    parts: list[str] = ["[Project context]"]
+    if activities:
+        parts.append(
+            "Notes / decisions / action items / reminders / milestones the user "
+            "added to this project's timeline. When asked about the project's "
+            "notes, decisions, reminders, or action items, use THESE — they are "
+            "timeline items, NOT entries in the research log (research-log.md) or "
+            "the document files:"
+        )
+        for a in activities:
+            label = _KIND_LABEL.get(a.get("kind", ""), a.get("kind") or "item")
+            line = f"- [{label}] {a.get('title', '')}".rstrip()
+            if a.get("description"):
+                line += f": {a['description']}"
+            parts.append(line)
+    if linked:
+        parts.append(
+            "Files linked into this project (treat as project materials; read "
+            "them with read_file and cite their real path):"
+        )
+        parts += [f"- {lf['path']}" for lf in linked]
+    parts.append("")
+    parts.append(query)
+    return "\n".join(parts)
 
 
 def _to_message_history(turns: list[ConversationTurn]):
@@ -71,10 +100,11 @@ async def run_once(req: AgentRequest) -> AgentResponse:
     # function folder + all projects. (Scope is intentionally NOT narrowed by
     # the current container.)
     linked = (req.project_context or {}).get("linked_files") or []
+    activities = (req.project_context or {}).get("activities") or []
     deps = CorporateDeps(files=build_global_reader(), backend=backend, linked=linked)
     agent = build_agent()
     history = _to_message_history(req.conversation_history)
-    query = _with_linked_note(req.query, linked)
+    query = _with_project_context(req.query, linked, activities)
 
     # One span per agent run, carrying Orrery domain attributes; the PydanticAI
     # spans (loop, tokens, tool calls) nest underneath it.

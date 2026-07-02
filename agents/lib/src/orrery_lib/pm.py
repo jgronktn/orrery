@@ -84,8 +84,13 @@ def register(agent, *, default_log_section: str = "Engineering") -> None:
     async def list_project_tasks(
         ctx: RunContext, status: str | None = None
     ) -> list[dict] | str:
-        """List tasks on the current project. Optionally filter by status
-        ('todo', 'doing', 'done'). Project conversations only."""
+        """List this project's timeline items — its notes, decisions, action
+        items, reminders, and milestones (each has a `kind`: note / decision /
+        task / reminder / milestone). THIS is where a project's notes and
+        decisions live — NOT the research log or the document files. Use it when
+        asked to summarize or list the project's notes/decisions/action items.
+        Optionally filter by status ('todo', 'doing', 'done'). Project
+        conversations only."""
         be = _client(ctx)
         if be is None:
             return NO_PROJECT
@@ -105,11 +110,13 @@ def register(agent, *, default_log_section: str = "Engineering") -> None:
         due_date: str | None = None,
         kind: str = "task",
     ) -> dict | str:
-        """Create an action item on the current project. due_date is ISO
-        (YYYY-MM-DD). kind is 'task', 'milestone', or 'reminder' — use
-        'milestone' for dated project checkpoints and 'reminder' for dated
-        nudges; both should carry a due_date. Echo the resolved date back to
-        the user so they can catch a misread."""
+        """Create a timeline item on the current project. due_date is ISO
+        (YYYY-MM-DD). kind is 'task' (action item), 'note', 'decision',
+        'milestone', or 'reminder' — use 'note' for a captured detail,
+        'decision' for a choice made, 'milestone' for dated checkpoints, and
+        'reminder' for dated nudges (milestone/reminder should carry a
+        due_date). Echo the resolved date back to the user so they can catch a
+        misread."""
         be = _client(ctx)
         if be is None:
             return NO_PROJECT
