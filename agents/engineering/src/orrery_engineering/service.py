@@ -79,7 +79,7 @@ async def run_once(req: AgentRequest) -> AgentResponse:
         [folder] if folder else [],
         extra_paths=[lf["path"] for lf in linked],
     )
-    deps = EngineeringDeps(files=reader, backend=backend)
+    deps = EngineeringDeps(files=reader, backend=backend, linked=linked)
     agent = build_agent()
     history = _to_message_history(req.conversation_history)
     query = _with_linked_note(req.query, linked)

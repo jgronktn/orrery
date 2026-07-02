@@ -167,19 +167,26 @@ async def send_message(
         # and can read them, even from another function's corpus. Skip stale
         # links whose source file is gone from the catalog.
         if project is not None and project.kind == "project":
-            link_paths = db.scalars(
-                select(ProjectDocumentLink.doc_path).where(
-                    ProjectDocumentLink.project_id == project.id
-                )
+            link_rows = db.execute(
+                select(
+                    ProjectDocumentLink.doc_path, ProjectDocumentLink.target_dir
+                ).where(ProjectDocumentLink.project_id == project.id)
             ).all()
-            if link_paths:
+            if link_rows:
+                paths = [r.doc_path for r in link_rows]
                 existing = set(
-                    db.scalars(select(Catalog.path).where(Catalog.path.in_(link_paths)))
+                    db.scalars(select(Catalog.path).where(Catalog.path.in_(paths)))
                 )
                 linked = [
-                    {"path": p, "name": p.rsplit("/", 1)[-1]}
-                    for p in link_paths
-                    if p in existing
+                    {
+                        "path": r.doc_path,
+                        "name": r.doc_path.rsplit("/", 1)[-1],
+                        # The project folder the link appears in (so the agent's
+                        # list_directory can show it there).
+                        "target_dir": r.target_dir,
+                    }
+                    for r in link_rows
+                    if r.doc_path in existing
                 ]
                 if linked:
                     project_context["linked_files"] = linked

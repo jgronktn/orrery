@@ -49,6 +49,10 @@ class EngineeringDeps:
     # backend's /internal/agent API (tasks + research log). None otherwise.
     backend: BackendClient | None = None
     pending_saves: list[dict] = field(default_factory=list)
+    # Files linked into this project: {path (real, for reading), name,
+    # target_dir (the project folder they appear in)}. list_directory surfaces
+    # them at their target folder even though they live in a function corpus.
+    linked: list[dict] = field(default_factory=list)
 
 
 def build_agent() -> Agent[EngineeringDeps, str]:
@@ -93,17 +97,31 @@ def build_agent() -> Agent[EngineeringDeps, str]:
         Returns each entry's `name`, `type` ('dir' or 'file'), and `path` —
         feed a file path to read_file, or a folder path back into
         list_directory to go deeper. Dropped files and emails land in the
-        container's 'attachments/' folder. Read-only.
+        container's 'attachments/' folder. Files LINKED into this project show
+        up here too (name marked "(linked)") — their `path` is the real
+        location in a function corpus; read_file that path. Read-only.
         """
         try:
-            return ctx.deps.files.list_dir(path)
+            entries = ctx.deps.files.list_dir(path)
+            missing = False
         except (FileNotFoundError, NotADirectoryError):
+            entries, missing = [], True
+        except Exception as exc:  # pragma: no cover - surfaced to the model
+            return f"LIST DIRECTORY ERROR: {exc}"
+        # Merge in files linked into this project at this folder. They live in a
+        # function corpus (their `path`), but appear where they were linked.
+        norm = (path or "").strip().strip("/")
+        linked_here = [
+            {"name": f"{lf['name']} (linked)", "type": "file", "path": lf["path"]}
+            for lf in ctx.deps.linked
+            if (lf.get("target_dir") or "").strip().strip("/") == norm
+        ]
+        if missing and not linked_here:
             return (
                 f"No folder at '{path}'. It may be a file (use read_file) or "
                 "may not exist — list a parent folder or use search_files."
             )
-        except Exception as exc:  # pragma: no cover - surfaced to the model
-            return f"LIST DIRECTORY ERROR: {exc}"
+        return entries + linked_here
 
     @agent.tool
     async def read_file(
