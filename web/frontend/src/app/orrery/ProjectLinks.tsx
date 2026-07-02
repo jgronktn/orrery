@@ -9,19 +9,22 @@ import {
 } from "../../api/client";
 
 // Link a function-corpus file into a project (no copy). Two ways:
-//   • "Link File"   — pick an Engineering file → shortcut in a project folder.
-//   • "Link Folder" — designate a project folder as a portal; drops route to a
-//                     function folder, leaving a shortcut behind.
-// Rendered as a footer below the project file tree. `onChanged` refreshes the
-// tree after any link/portal change.
+//   • "Link File"   — pick a file from the project's function → shortcut in a
+//                     project folder.
+//   • "Link Folder" — designate a project folder as a portal; drops route to
+//                     the project's function folder, leaving a shortcut behind.
+// `func` is the project's function key (e.g. "engr", "corp"). Rendered as a
+// footer below the project file tree; `onChanged` refreshes the tree.
 export function LinkControls({
   projectId,
   slug,
+  func,
   projectFolders,
   onChanged,
 }: {
   projectId: string;
   slug: string;
+  func: string;
   projectFolders: string[];
   onChanged: () => void;
 }) {
@@ -100,6 +103,7 @@ export function LinkControls({
       {panel === "spec" && (
         <SpecPicker
           projectId={projectId}
+          func={func}
           fns={fns}
           projectFolders={projectFolders}
           fullProj={fullProj}
@@ -113,6 +117,7 @@ export function LinkControls({
       {panel === "folder" && (
         <FolderPicker
           projectId={projectId}
+          func={func}
           fns={fns}
           projectFolders={projectFolders}
           fullProj={fullProj}
@@ -133,6 +138,7 @@ const go =
 
 function SpecPicker({
   projectId,
+  func,
   fns,
   projectFolders,
   fullProj,
@@ -140,6 +146,7 @@ function SpecPicker({
   onDone,
 }: {
   projectId: string;
+  func: string;
   fns: FunctionInfo[];
   projectFolders: string[];
   fullProj: (rel: string) => string;
@@ -151,18 +158,17 @@ function SpecPicker({
   const [dir, setDir] = useState("");
   const [busy, setBusy] = useState(false);
 
-  // A project is always associated with the Engineering function — link files
-  // from the engineering corpus (no function to choose).
-  const engr = fns.find((f) => f.key === "engr");
+  // Link files from the project's own function corpus (no function to choose).
+  const fn = fns.find((f) => f.key === func);
   useEffect(() => {
-    if (!engr) return;
+    if (!fn) return;
     setFiles([]);
     setPath("");
     api
-      .listContainerFiles(engr.stream_id)
+      .listContainerFiles(fn.stream_id)
       .then(setFiles)
       .catch(() => undefined);
-  }, [engr?.stream_id]);
+  }, [fn?.stream_id]);
 
   const link = async () => {
     if (!path) return;
@@ -210,6 +216,7 @@ function SpecPicker({
 
 function FolderPicker({
   projectId,
+  func,
   fns,
   projectFolders,
   fullProj,
@@ -217,6 +224,7 @@ function FolderPicker({
   onChanged,
 }: {
   projectId: string;
+  func: string;
   fns: FunctionInfo[];
   projectFolders: string[];
   fullProj: (rel: string) => string;
@@ -229,8 +237,8 @@ function FolderPicker({
   const [busy, setBusy] = useState(false);
   const [portals, setPortals] = useState<LinkFolder[]>([]);
 
-  // A project portal always routes to its Engineering function (no choice).
-  const engFolder = fns.find((f) => f.key === "engr")?.folder ?? "engineering";
+  // A project portal routes to its own function (no destination to choose).
+  const funcFolder = fns.find((f) => f.key === func)?.folder ?? func;
 
   const reloadPortals = () =>
     api.listLinkFolders(projectId).then(setPortals).catch(() => undefined);
@@ -239,10 +247,10 @@ function FolderPicker({
   }, [projectId]);
   useEffect(() => {
     api
-      .functionFolders("engr")
+      .functionFolders(func)
       .then(setDestDirs)
       .catch(() => undefined);
-  }, []);
+  }, [func]);
 
   const create = async () => {
     if (!folderRel || !destRel) return;
@@ -251,8 +259,8 @@ function FolderPicker({
       await api.createLinkFolder(
         projectId,
         fullProj(folderRel),
-        "engr",
-        `${engFolder}/${destRel}`,
+        func,
+        `${funcFolder}/${destRel}`,
       );
       await reloadPortals();
       onChanged();
@@ -288,7 +296,7 @@ function FolderPicker({
       </div>
       <div className={row}>
         <span className={lbl}>Routes to</span>
-        <span className="shrink-0 font-mono text-[10px] text-muted">{engFolder}/</span>
+        <span className="shrink-0 font-mono text-[10px] text-muted">{funcFolder}/</span>
         <select className={sel} value={destRel} onChange={(e) => setDestRel(e.target.value)}>
           <option value="">folder…</option>
           {destDirs.map((d) => (

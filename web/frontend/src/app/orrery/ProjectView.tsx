@@ -404,6 +404,7 @@ export default function ProjectView() {
                   <LinkControls
                     projectId={id}
                     slug={project.slug}
+                    func={project.function ?? "engr"}
                     projectFolders={folders}
                     onChanged={() => setReloadToken((n) => n + 1)}
                   />
