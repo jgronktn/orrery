@@ -386,6 +386,9 @@ export default function ProjectView() {
                         setUploading(file.name);
                         try {
                           return await api.uploadDocument(id, file, dir);
+                        } catch (e) {
+                          fail(e); // surface upload errors (e.g. "file too large")
+                          throw e;
                         } finally {
                           setUploading(null);
                         }

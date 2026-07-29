@@ -235,7 +235,7 @@ def update_project(
     return _to_out(project, membership.role)
 
 
-MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+MAX_UPLOAD_BYTES = 100 * 1024 * 1024
 
 
 _FROM_RE = re.compile(r"^From:\s*(.+)$", re.IGNORECASE | re.MULTILINE)
@@ -470,7 +470,7 @@ async def _read_upload(file: UploadFile) -> bytes:
     if not data:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "empty file")
     if len(data) > MAX_UPLOAD_BYTES:
-        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "file too large (max 25 MB)")
+        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "file too large (max 100 MB)")
     return data
 
 
@@ -856,7 +856,7 @@ async def upload_task_document(
     if not data:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "empty file")
     if len(data) > MAX_UPLOAD_BYTES:
-        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "file too large (max 25 MB)")
+        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "file too large (max 100 MB)")
     filename = file.filename or "upload"
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     cat = commit_path.add_file(

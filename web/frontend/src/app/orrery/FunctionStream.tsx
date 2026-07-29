@@ -401,6 +401,9 @@ export default function FunctionStream() {
                   setUploading(file.name);
                   try {
                     return await api.uploadFunctionDoc(key, file, dir);
+                  } catch (e) {
+                    fail(e); // surface upload errors (e.g. "file too large")
+                    throw e;
                   } finally {
                     setUploading(null);
                   }

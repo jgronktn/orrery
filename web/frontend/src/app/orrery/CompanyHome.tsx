@@ -421,6 +421,9 @@ export default function CompanyHome() {
         setUploading(file.name);
         try {
           return await api.uploadFunctionDoc(selFn.key, file, dir);
+        } catch (e) {
+          setError(e instanceof ApiError ? e.message : String(e)); // surface upload errors
+          throw e;
         } finally {
           setUploading(null);
         }
