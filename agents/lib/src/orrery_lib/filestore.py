@@ -30,7 +30,7 @@ ENGINEERING_ROOT = FILES_ROOT / "engineering"
 GIT_AUTHOR_NAME = os.environ.get("ORRERY_GIT_AUTHOR_NAME", "Orrery Engineering Agent")
 GIT_AUTHOR_EMAIL = os.environ.get("ORRERY_GIT_AUTHOR_EMAIL", "agent@orrery.local")
 
-_TEXT_EXT = {".md", ".markdown", ".txt", ".csv"}
+_TEXT_EXT = {".md", ".markdown", ".txt", ".csv", ".tsv"}
 _DOCX_EXT = {".docx"}
 _PDF_EXT = {".pdf"}
 _XLSX_EXT = {".xlsx"}
@@ -45,6 +45,13 @@ _SNIPPET_CHARS = 240
 # hard backstop (see the cap_catalog_tsv migration).
 MAX_EXTRACT_CHARS = 1_000_000
 _TRUNCATION_MARKER = "\n\n[... text truncated for indexing ...]"
+
+# Bulk data files (CSV/TSV measurement logs, exports) past this size are numeric
+# dumps with ~no semantic-search value. Catalog them by name/path but skip the
+# expensive text extraction + embedding of megabytes of numbers. Smaller data
+# files (BOMs, parts tables) are still extracted so their contents stay searchable.
+_DATA_EXT = {".csv", ".tsv"}
+MAX_DATA_EXTRACT_BYTES = 1_000_000  # ~1 MB
 
 # search_files greps the body of only the cheap-to-read text formats. PDFs and
 # Office docs match on filename — their body text is served by the semantic
@@ -217,8 +224,16 @@ def _eml_to_text(data: bytes) -> str:
 
 def extract_text(path: Path) -> str | None:
     """Deterministic text extraction for catalog/search (Tier 0). Returns None
-    for binaries we can't read here (images, archives) and OCR-only PDFs."""
+    for binaries we can't read here (images, archives), OCR-only PDFs, and large
+    data dumps (CSV/TSV over MAX_DATA_EXTRACT_BYTES) — those are cataloged by
+    name/path only, not by content."""
     ext = path.suffix.lower()
+    if ext in _DATA_EXT:
+        try:
+            if path.stat().st_size > MAX_DATA_EXTRACT_BYTES:
+                return None  # large data dump: catalog by name/path only
+        except OSError:
+            return None
     try:
         if ext in _TEXT_EXT:
             text = path.read_text(encoding="utf-8", errors="replace")
