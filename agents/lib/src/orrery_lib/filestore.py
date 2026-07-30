@@ -38,6 +38,14 @@ _ODT_EXT = {".odt"}
 _EML_EXT = {".eml"}
 _SNIPPET_CHARS = 240
 
+# Cap the text we store/index per file. A multi-MB data file (e.g. a 48 MB CSV
+# current-log) would otherwise store tens of millions of chars in `extracted_text`
+# and overflow Postgres's 1 MB tsvector ceiling on insert. 1 M chars (~150 pages)
+# covers any real document; the catalog's tsvector caps its own input again as a
+# hard backstop (see the cap_catalog_tsv migration).
+MAX_EXTRACT_CHARS = 1_000_000
+_TRUNCATION_MARKER = "\n\n[... text truncated for indexing ...]"
+
 # search_files greps the body of only the cheap-to-read text formats. PDFs and
 # Office docs match on filename — their body text is served by the semantic
 # index (search_docs), which is built once at ingestion. This keeps a keyword
@@ -213,20 +221,24 @@ def extract_text(path: Path) -> str | None:
     ext = path.suffix.lower()
     try:
         if ext in _TEXT_EXT:
-            return path.read_text(encoding="utf-8", errors="replace")
-        if ext in _DOCX_EXT:
-            return _docx_to_text(path.read_bytes())
-        if ext in _PDF_EXT:
-            return _pdf_to_text(path.read_bytes()) or None
-        if ext in _XLSX_EXT:
-            return _xlsx_to_text(path.read_bytes()) or None
-        if ext in _ODT_EXT:
-            return _odt_to_text(path.read_bytes()) or None
-        if ext in _EML_EXT:
-            return _eml_to_text(path.read_bytes()) or None
+            text = path.read_text(encoding="utf-8", errors="replace")
+        elif ext in _DOCX_EXT:
+            text = _docx_to_text(path.read_bytes())
+        elif ext in _PDF_EXT:
+            text = _pdf_to_text(path.read_bytes()) or None
+        elif ext in _XLSX_EXT:
+            text = _xlsx_to_text(path.read_bytes()) or None
+        elif ext in _ODT_EXT:
+            text = _odt_to_text(path.read_bytes()) or None
+        elif ext in _EML_EXT:
+            text = _eml_to_text(path.read_bytes()) or None
+        else:
+            return None
     except Exception:
         return None  # never let extraction failure block cataloging
-    return None
+    if text and len(text) > MAX_EXTRACT_CHARS:
+        text = text[:MAX_EXTRACT_CHARS] + _TRUNCATION_MARKER
+    return text
 
 
 def _snippet(text: str, terms: list[str]) -> str:
