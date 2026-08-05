@@ -111,7 +111,7 @@ export function TransferView({
       <div className="border-b border-line bg-paper px-6 py-3">
         <textarea
           value={text}
-          rows={3}
+          rows={6}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {

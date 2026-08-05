@@ -143,21 +143,22 @@ export function OrreryMap({
 }
 
 // A moon attached to the company core (shown on the home view): opens the
-// per-user cross-device Transfer surface. Sits straight below the core in the
-// clear zone between the core disc and the first orbit ring.
+// per-user cross-device Transfer surface. Sits on the first orbit ring, in the
+// gap between Corporate (198°) and Engineering (300°).
 function CoreMoon({ onOpen }: { onOpen: () => void }) {
   const accent = "#50708a";
   const cx = STAGE / 2;
   const cy = STAGE / 2;
   const moon = Math.round(72 * 0.6); // same size as the vault moon
-  const dist = 56 + 12 + moon / 2; // just past the core disc (r≈56)
-  const ang = 90; // straight down
-  const mx = cx;
-  const my = cy + dist;
+  const dist = 116; // first orbit ring (d=232), just outside the core "sun"
+  const ang = 249; // angular midpoint between Corporate (198°) and Engineering (300°)
+  const rad = (ang * Math.PI) / 180;
+  const mx = cx + dist * Math.cos(rad);
+  const my = cy + dist * Math.sin(rad);
 
   return (
     <>
-      {/* connector from the core center down to the moon, behind the discs */}
+      {/* connector along the radial from the core out to the moon, behind discs */}
       <div
         className="absolute z-[1]"
         style={{
