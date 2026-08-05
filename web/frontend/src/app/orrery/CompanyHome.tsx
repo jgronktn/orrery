@@ -342,7 +342,7 @@ export default function CompanyHome() {
       }
     : undefined;
   const topTimeline = (
-    <div className="shrink-0 border-b border-line" style={{ height: 220 }}>
+    <div className="shrink-0 border-b border-line" style={{ height: 280 }}>
       <FunctionTimeline
         nodes={timelineEvents}
         accent={selFn ? accentOf(selFn.key) : "#50708a"}

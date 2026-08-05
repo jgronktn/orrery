@@ -34,7 +34,7 @@ interface Dims {
   dot: number;
   strip: number; // width of the colored type-icon strip on the card's left
 }
-const FULL: Dims = { cardW: 156, cardH: 33, rowH: 50, axisGap: 16, titlePx: 12, metaPx: 9.5, dot: 5, strip: 28 };
+const FULL: Dims = { cardW: 156, cardH: 33, rowH: 44, axisGap: 16, titlePx: 12, metaPx: 9.5, dot: 5, strip: 28 };
 const MINI: Dims = { cardW: 104, cardH: 26, rowH: 30, axisGap: 9, titlePx: 10.5, metaPx: 8, dot: 4, strip: 22 };
 
 interface Placed {
@@ -44,35 +44,91 @@ interface Placed {
   row: number;
 }
 
+// A cluster of items that couldn't fit the visible rows at a given x — surfaced
+// as a clickable "+N" chip instead of being clipped off-screen.
+interface OverflowChip {
+  id: string;
+  x: number;
+  items: TimelineNode[];
+}
+
+// Pack cards into rows above/below the axis. Rows are capped to what fits the
+// band height (maxAbove/maxBelow); anything that would land off-screen becomes
+// overflow, grouped by x-proximity into "+N" chips.
 function layoutLanes(
   nodes: TimelineNode[],
   xAt: (t: number) => number,
   cardW: number,
-): Placed[] {
+  maxAbove: number,
+  maxBelow: number,
+): { placed: Placed[]; chips: OverflowChip[] } {
   const sorted = [...nodes].sort((a, b) => a.time - b.time);
   const rowsAbove: number[] = [];
   const rowsBelow: number[] = [];
-  const out: Placed[] = [];
+  const placed: Placed[] = [];
+  const overflow: { node: TimelineNode; x: number }[] = [];
   let alt = 0; // alternation counter for non-email items only
+
+  // First free row on a side at this x (packs by horizontal overlap).
+  const freeRow = (rows: number[], left: number) => {
+    let row = 0;
+    while (row < rows.length && (rows[row] ?? -Infinity) > left - 8) row++;
+    return row;
+  };
+
   sorted.forEach((node) => {
     const x = xAt(node.time);
     const left = x - cardW / 2;
     const right = x + cardW / 2;
     // Emails are placed by direction (outgoing above, incoming below); every
     // other item keeps the alternating above/below packing.
-    let side: "above" | "below";
-    if (node.type === "email" && node.direction) {
-      side = node.direction === "out" ? "above" : "below";
-    } else {
-      side = alt++ % 2 === 0 ? "above" : "below";
+    const isEmail = node.type === "email" && !!node.direction;
+    let side: "above" | "below" = isEmail
+      ? node.direction === "out"
+        ? "above"
+        : "below"
+      : alt++ % 2 === 0
+        ? "above"
+        : "below";
+    let rows = side === "above" ? rowsAbove : rowsBelow;
+    let cap = side === "above" ? maxAbove : maxBelow;
+    let row = freeRow(rows, left);
+
+    // If this side is full at this x, spill to the other side before giving up
+    // (non-emails only — email side carries in/out meaning).
+    if (row >= cap && !isEmail) {
+      const oRows = side === "above" ? rowsBelow : rowsAbove;
+      const oCap = side === "above" ? maxBelow : maxAbove;
+      const oRow = freeRow(oRows, left);
+      if (oRow < oCap) {
+        side = side === "above" ? "below" : "above";
+        rows = oRows;
+        cap = oCap;
+        row = oRow;
+      }
     }
-    const rows = side === "above" ? rowsAbove : rowsBelow;
-    let row = 0;
-    while (row < rows.length && (rows[row] ?? -Infinity) > left - 8) row++;
-    rows[row] = right;
-    out.push({ node, x, side, row });
+
+    if (row < cap) {
+      rows[row] = right;
+      placed.push({ node, x, side, row });
+    } else {
+      overflow.push({ node, x });
+    }
   });
-  return out;
+
+  // Group overflow into chips by x-proximity (items within a card-width share
+  // one chip, since they pile at nearly the same spot).
+  const chips: OverflowChip[] = [];
+  overflow.sort((a, b) => a.x - b.x);
+  for (const o of overflow) {
+    const last = chips[chips.length - 1];
+    if (last && Math.abs(o.x - last.x) < cardW) {
+      last.items.push(o.node);
+    } else {
+      chips.push({ id: o.node.id, x: o.x, items: [o.node] });
+    }
+  }
+  return { placed, chips };
 }
 
 const clamp = (ppm: number, minPpm: number, maxPpm: number) =>
@@ -105,6 +161,7 @@ export function FunctionTimeline({
   const [size, setSize] = useState({ w: 1000, h: compact ? 170 : 440 });
   // Instant hover tooltip showing days-from-now, positioned at the cursor.
   const [hoverTip, setHoverTip] = useState<{ x: number; y: number; text: string } | null>(null);
+  const [openChip, setOpenChip] = useState<string | null>(null);
   const showTip = (e: React.MouseEvent, n: TimelineNode) => {
     const r = ref.current?.getBoundingClientRect();
     if (!r) return;
@@ -211,7 +268,14 @@ export function FunctionTimeline({
     const x = xAt(n.time);
     return x > -d.cardW && x < W + d.cardW;
   });
-  const placed = tagMode ? layoutLanes(visible, xAt, d.cardW) : [];
+  // How many card rows fit above / below the axis before clipping the band.
+  const maxAbove = Math.max(1, Math.floor((axisY - d.axisGap - d.cardH) / d.rowH) + 1);
+  const maxBelow = Math.max(1, Math.floor((H - axisY - d.axisGap - d.cardH) / d.rowH) + 1);
+  const { placed, chips } = tagMode
+    ? layoutLanes(visible, xAt, d.cardW, maxAbove, maxBelow)
+    : { placed: [] as Placed[], chips: [] as OverflowChip[] };
+  const openItems = openChip ? chips.find((c) => c.id === openChip)?.items ?? null : null;
+  const openChipX = openChip ? chips.find((c) => c.id === openChip)?.x ?? 0 : 0;
   const nowX = xAt(Date.now());
 
   const onWheel = (e: React.WheelEvent) => {
@@ -452,6 +516,81 @@ export function FunctionTimeline({
           </button>
         );
       })}
+
+      {/* overflow: a "+N" chip for items that didn't fit the visible rows */}
+      {chips.map((c) => (
+        <button
+          key={c.id}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpenChip((cur) => (cur === c.id ? null : c.id));
+          }}
+          title={`${c.items.length} more item${c.items.length === 1 ? "" : "s"} here`}
+          className="absolute z-[6] -translate-x-1/2 -translate-y-1/2 rounded-full border font-mono font-semibold"
+          style={{
+            left: c.x,
+            top: axisY,
+            padding: compact ? "1px 6px" : "2px 8px",
+            fontSize: compact ? 10 : 11,
+            background: "#fff",
+            color: accent,
+            borderColor: `${accent}88`,
+            boxShadow: "0 2px 8px -4px rgba(20,18,12,.4)",
+          }}
+        >
+          +{c.items.length}
+        </button>
+      ))}
+
+      {/* popover listing a chip's buried items, each clickable to open it */}
+      {openItems && (
+        <>
+          <div
+            className="absolute inset-0 z-[7]"
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              setOpenChip(null);
+            }}
+          />
+          <div
+            className="absolute z-[8] flex w-[220px] -translate-x-1/2 flex-col overflow-hidden rounded-lg border border-line-soft bg-paper shadow-[0_10px_28px_-10px_rgba(20,18,12,.55)]"
+            onMouseDown={(e) => e.stopPropagation()}
+            style={{
+              left: Math.min(Math.max(openChipX, 116), Math.max(116, W - 116)),
+              top: Math.min(Math.max(axisY + 8, 8), Math.max(8, H - Math.min(220, H - 16) - 8)),
+              maxHeight: Math.min(220, H - 16),
+            }}
+          >
+            <div className="shrink-0 border-b border-hairline px-3 py-1.5 font-mono text-[9.5px] uppercase tracking-[0.12em] text-faint">
+              {openItems.length} more here
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {openItems.map((n) => (
+                <button
+                  key={n.id}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelect?.(n);
+                    setOpenChip(null);
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-rowhover"
+                >
+                  <span
+                    className="grid h-4 w-4 shrink-0 place-items-center rounded-[3px]"
+                    style={{ background: typeColor(n), color: "#f1efe9" }}
+                  >
+                    <TypeGlyph type={n.type} size={10} />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-[12px] text-strong" title={n.name}>
+                    {n.name}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
 
       {hourDayLabels.map((dl, i) => (
         <div

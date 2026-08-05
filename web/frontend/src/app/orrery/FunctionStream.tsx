@@ -377,7 +377,7 @@ export default function FunctionStream() {
 
         {/* timeline band across the top, full width (like the main page) */}
         <div className="shrink-0">
-          <div className="border-b border-line" style={{ height: 220 }}>
+          <div className="border-b border-line" style={{ height: 280 }}>
             <FunctionTimeline
               nodes={shown}
               accent={accent}
