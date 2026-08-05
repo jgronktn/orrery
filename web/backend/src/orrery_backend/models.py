@@ -17,6 +17,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -483,6 +484,12 @@ class TransferItem(Base):
     )
     kind: Mapped[str] = mapped_column(String(10), default="text", server_default="text")
     text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # File items (kind="file"): metadata + the bytes. `data` is deferred so the
+    # list poll never loads blobs — only the download endpoint touches it.
+    filename: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    content_type: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    size: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True, deferred=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

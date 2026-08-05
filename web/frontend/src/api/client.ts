@@ -351,13 +351,23 @@ export const api = {
   deleteLogin: (id: string) =>
     request<void>(`/api/vault/logins/${id}`, { method: "DELETE" }),
 
-  // Cross-device transfer ("Transfer" moon; per-user, text for now)
+  // Cross-device transfer ("Transfer" moon; per-user, text + files)
   listTransfers: () => request<TransferItem[]>("/api/transfer"),
   createTransferText: (text: string) =>
     request<TransferItem>("/api/transfer/text", {
       method: "POST",
       body: JSON.stringify({ text }),
     }),
+  uploadTransferFile: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return request<TransferItem>("/api/transfer/file", {
+      method: "POST",
+      body: form,
+    });
+  },
+  // A same-origin URL for an <a download> link; the session cookie authorizes.
+  transferDownloadUrl: (id: string) => `${BASE}/api/transfer/${id}/download`,
   deleteTransfer: (id: string) =>
     request<void>(`/api/transfer/${id}`, { method: "DELETE" }),
 };

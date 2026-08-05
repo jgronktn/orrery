@@ -373,4 +373,7 @@ class TransferItemOut(BaseModel):
     id: uuid.UUID
     kind: str
     text: str | None = None
+    filename: str | None = None
+    content_type: str | None = None
+    size: int | None = None
     created_at: datetime
