@@ -23,9 +23,10 @@ const CHIPS = ["note", "decision", "reminder", "task", "milestone"].map(
   (v) => KINDS.find((k) => k.value === v)!,
 );
 
-// Actionable kinds can be completed (marked done). Notes and Decisions are
-// ongoing records — never completed, never shown in the Open Items list.
-export const ACTIONABLE_KINDS = new Set(["task", "milestone", "reminder"]);
+// Actionable kinds can be completed (marked done) and appear in Open Items.
+// Notes, Decisions, and Milestones are ongoing records — never completed,
+// never listed in Open Items (they still show on the timeline).
+export const ACTIONABLE_KINDS = new Set(["task", "reminder"]);
 export const isActionable = (kind?: string | null): boolean =>
   ACTIONABLE_KINDS.has(kind ?? "");
 

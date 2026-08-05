@@ -9,7 +9,7 @@ import {
   typeColor,
   typeLabel,
 } from "./timelineScale";
-import { TypeGlyph } from "./timelineSurface";
+import { isActionable, TypeGlyph } from "./timelineSurface";
 
 // Horizontal activity timeline: a time axis at the vertical center with
 // zoom-dependent tick marks. Zoom-in is capped so one day fills the width;
@@ -339,7 +339,7 @@ export function FunctionTimeline({
         {/* tag mode: connectors + axis dots */}
         {placed.map((p) => {
           const color = typeColor(p.node);
-          const done = p.node.status === "done";
+          const done = isActionable(p.node.type) && p.node.status === "done";
           const cardNearY =
             p.side === "above"
               ? axisY - d.axisGap - p.row * d.rowH
@@ -357,7 +357,7 @@ export function FunctionTimeline({
           visible.map((n) => {
             const x = xAt(n.time);
             const sel = n.id === selectedId;
-            const done = n.status === "done";
+            const done = isActionable(n.type) && n.status === "done";
             return (
               <circle
                 key={n.id}
@@ -390,7 +390,7 @@ export function FunctionTimeline({
             ? axisY - d.axisGap - p.row * d.rowH - d.cardH
             : axisY + d.axisGap + p.row * d.rowH;
         const selected = p.node.id === selectedId;
-        const done = p.node.status === "done";
+        const done = isActionable(p.node.type) && p.node.status === "done";
         // Emails show "To" (outgoing) / "From" (incoming) instead of the type
         // label; everything else keeps its type label.
         const label =

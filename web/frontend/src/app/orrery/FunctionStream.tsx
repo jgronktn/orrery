@@ -513,6 +513,7 @@ export default function FunctionStream() {
                 onApprove={(id) => void resolve(id, true)}
                 onReject={(id) => void resolve(id, false)}
                 reminderSource={nodes}
+                onReminderSelect={(r) => setSelectedId(r.id)}
               />
             )}
           </div>

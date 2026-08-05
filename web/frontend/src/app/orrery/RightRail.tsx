@@ -5,7 +5,8 @@ import { FunctionTimeline } from "./FunctionTimeline";
 import { ThinkingLabel } from "./ThinkingLabel";
 import { funcLabel, risk } from "./theme";
 import { relAgo } from "./time";
-import { daysFromNow, fmtDate } from "./timelineScale";
+import { daysFromNow, fmtDate, typeColor } from "./timelineScale";
+import { isActionable } from "./timelineSurface";
 
 // ── Timeline panel — a compact version of the function-page timeline ─
 
@@ -40,9 +41,10 @@ export function TimelinePanel({
   );
 }
 
-// ── Right-rail accordion: Pending approvals · Reminders ─────────────
-// Two selectable bars; one section open at a time. Reminders open by
-// default. Reminders = upcoming timeline reminders (past ones drop off).
+// ── Right-rail accordion: Pending approvals · Open items ────────────
+// Two selectable bars; one section open at a time. Open items open by
+// default. Open items = action items + reminders that aren't done yet
+// (notes, decisions, and milestones are ongoing records, not listed here).
 
 export function RailAccordion({
   approvals,
@@ -63,18 +65,14 @@ export function RailAccordion({
   reminderSource: TimelineNode[];
   onReminderSelect?: (r: TimelineNode) => void;
 }) {
-  const [open, setOpen] = useState<"approvals" | "reminders">("reminders");
+  const [open, setOpen] = useState<"approvals" | "items">("items");
 
-  // Upcoming reminders only: drop anything dated before today (UTC start of
-  // day, since timeline items sit at noon UTC). Soonest first.
-  const now = new Date();
-  const todayStartUTC = Date.UTC(
-    now.getUTCFullYear(),
-    now.getUTCMonth(),
-    now.getUTCDate(),
-  );
-  const reminders = reminderSource
-    .filter((n) => n.type === "reminder" && n.time >= todayStartUTC)
+  // Open action items + reminders (not done). Overdue ones stay — they're
+  // still open. Soonest/oldest first so what's due is at the top.
+  const items = reminderSource
+    .filter(
+      (n) => n.kind === "task" && isActionable(n.type) && n.status !== "done",
+    )
     .sort((a, b) => a.time - b.time);
 
   return (
@@ -96,14 +94,14 @@ export function RailAccordion({
         />
       )}
       <RailBar
-        label="Reminders"
-        open={open === "reminders"}
-        count={reminders.length}
-        onClick={() => setOpen("reminders")}
+        label="Open items"
+        open={open === "items"}
+        count={items.length}
+        onClick={() => setOpen("items")}
       />
-      {open === "reminders" && (
-        <RemindersBody
-          reminders={reminders}
+      {open === "items" && (
+        <OpenItemsBody
+          items={items}
           scopeLabel={scopeLabel}
           onSelect={onReminderSelect}
         />
@@ -142,20 +140,21 @@ function RailBar({
   );
 }
 
-// Upcoming reminders, soonest first. Rows are clickable when onSelect is given.
-function RemindersBody({
-  reminders,
+// Open action items + reminders, soonest first. Rows are clickable when
+// onSelect is given (opens the item's detail panel, where it can be completed).
+function OpenItemsBody({
+  items,
   scopeLabel,
   onSelect,
 }: {
-  reminders: TimelineNode[];
+  items: TimelineNode[];
   scopeLabel: string;
   onSelect?: (r: TimelineNode) => void;
 }) {
-  if (reminders.length === 0) {
+  if (items.length === 0) {
     return (
       <div className="px-5 py-6 text-center text-[12.5px] text-hint">
-        No upcoming reminders in {scopeLabel}.
+        Nothing open in {scopeLabel}.
       </div>
     );
   }
@@ -163,13 +162,13 @@ function RemindersBody({
     "flex w-full items-start justify-between gap-3 border-t border-hairline px-5 py-2.5 text-left";
   return (
     <div>
-      {reminders.map((r) => {
+      {items.map((r) => {
         const inner = (
           <>
             <span className="flex min-w-0 items-start gap-2">
               <span
                 className="mt-1 h-2 w-2 shrink-0 rounded-full"
-                style={{ background: "#a86676" }}
+                style={{ background: typeColor(r) }}
               />
               <span className="min-w-0">
                 <span className="block truncate text-[12.5px] text-strong">
