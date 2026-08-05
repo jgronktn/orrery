@@ -358,3 +358,19 @@ class VaultLoginOut(BaseModel):
     note: str
     mfa: bool
     created_at: datetime
+
+
+# ── Cross-device transfer ("Transfer" moon) — per-user, text for now ─
+
+
+class TransferTextIn(BaseModel):
+    text: str = Field(min_length=1, max_length=100_000)
+
+
+class TransferItemOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    kind: str
+    text: str | None = None
+    created_at: datetime

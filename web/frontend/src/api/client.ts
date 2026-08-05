@@ -31,6 +31,7 @@ export type FunctionInfo = components["schemas"]["FunctionOut"];
 export type Company = components["schemas"]["CompanyOut"];
 export type VaultLogin = components["schemas"]["VaultLoginOut"];
 export type VaultLoginIn = components["schemas"]["VaultLoginIn"];
+export type TransferItem = components["schemas"]["TransferItemOut"];
 
 export class ApiError extends Error {
   status: number;
@@ -349,4 +350,14 @@ export const api = {
     }),
   deleteLogin: (id: string) =>
     request<void>(`/api/vault/logins/${id}`, { method: "DELETE" }),
+
+  // Cross-device transfer ("Transfer" moon; per-user, text for now)
+  listTransfers: () => request<TransferItem[]>("/api/transfer"),
+  createTransferText: (text: string) =>
+    request<TransferItem>("/api/transfer/text", {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    }),
+  deleteTransfer: (id: string) =>
+    request<void>(`/api/transfer/${id}`, { method: "DELETE" }),
 };

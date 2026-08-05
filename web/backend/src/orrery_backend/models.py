@@ -466,3 +466,24 @@ class VaultLogin(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class TransferItem(Base):
+    """A per-user cross-device transfer item — the "Transfer" moon. Lets one
+    person hand text (and later files) between their own browsers on different
+    computers: device A creates an item, device B sees it (polling). Scoped to
+    one user; nobody else's items are visible. `kind` is "text" for now; file
+    columns arrive in the files step."""
+
+    __tablename__ = "transfer_items"
+
+    id: Mapped[uuid.UUID] = mapped_column(SAUuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    kind: Mapped[str] = mapped_column(String(10), default="text", server_default="text")
+    text: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

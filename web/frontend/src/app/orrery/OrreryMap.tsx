@@ -16,6 +16,7 @@ export function OrreryMap({
   onSelect,
   onOpen,
   onOpenVault,
+  onOpenTransfer,
   onDropFile,
   toolLines = [],
 }: {
@@ -24,6 +25,7 @@ export function OrreryMap({
   onSelect: (s: Selection) => void;
   onOpen: (key: string) => void;
   onOpenVault?: () => void;
+  onOpenTransfer?: () => void;
   onDropFile: (key: string, file: File) => void;
   // Faint connector lines (core → attached tools), measured by the parent in
   // this map's coordinate space; drawn above the gradient, behind the bodies.
@@ -130,8 +132,76 @@ export function OrreryMap({
 
         {/* IT credential vault — a small moon beside the IT body when selected */}
         {selected === "it" && onOpenVault && <VaultMoon onOpen={onOpenVault} />}
+
+        {/* Cross-device transfer — a moon on the company core (home view) */}
+        {selected === "company" && onOpenTransfer && (
+          <CoreMoon onOpen={onOpenTransfer} />
+        )}
       </div>
     </div>
+  );
+}
+
+// A moon attached to the company core (shown on the home view): opens the
+// per-user cross-device Transfer surface. Sits straight below the core in the
+// clear zone between the core disc and the first orbit ring.
+function CoreMoon({ onOpen }: { onOpen: () => void }) {
+  const accent = "#50708a";
+  const cx = STAGE / 2;
+  const cy = STAGE / 2;
+  const moon = Math.round(72 * 0.6); // same size as the vault moon
+  const dist = 56 + 12 + moon / 2; // just past the core disc (r≈56)
+  const ang = 90; // straight down
+  const mx = cx;
+  const my = cy + dist;
+
+  return (
+    <>
+      {/* connector from the core center down to the moon, behind the discs */}
+      <div
+        className="absolute z-[1]"
+        style={{
+          left: cx,
+          top: cy,
+          width: dist,
+          height: 2,
+          background: `${accent}99`,
+          transformOrigin: "0 50%",
+          transform: `rotate(${ang}deg)`,
+        }}
+      />
+      <div
+        className="absolute z-[4] flex -translate-x-1/2 -translate-y-1/2 flex-col items-center"
+        style={{ left: mx, top: my }}
+      >
+        <button
+          onClick={onOpen}
+          title="Transfer text & files between your devices"
+          className="grid place-items-center rounded-full bg-white"
+          style={{
+            width: moon,
+            height: moon,
+            color: accent,
+            border: `1.5px solid ${accent}66`,
+            boxShadow: `0 6px 16px -10px rgba(20,18,12,.45)`,
+          }}
+        >
+          <svg width="18" height="18" viewBox="0 0 16 16" aria-hidden>
+            <path
+              d="M2.5 5.5h9M9 3l2.5 2.5L9 8M13.5 10.5h-9M7 8L4.5 10.5 7 13"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+        <span className="mt-1.5 font-mono text-[9.5px] leading-tight text-[#7e8270]">
+          Transfer
+        </span>
+      </div>
+    </>
   );
 }
 

@@ -19,6 +19,7 @@ from .functions_api import home_router
 from .functions_api import router as functions_router
 from .internal import router as internal_router
 from .projects import router as projects_router
+from .transfer import router as transfer_router
 from .vault import router as vault_router
 
 logging.basicConfig(level=logging.INFO)
@@ -65,3 +66,4 @@ app.include_router(approvals_router)
 app.include_router(internal_router)
 app.include_router(files_router)
 app.include_router(vault_router)
+app.include_router(transfer_router)

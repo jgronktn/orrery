@@ -21,6 +21,7 @@ import {
 import { FileViewer, type PreviewFile } from "./FileViewer";
 import { FunctionFiles } from "./FunctionFiles";
 import { LoginVault } from "./LoginVault";
+import { TransferView } from "./TransferView";
 import { FunctionTimeline } from "./FunctionTimeline";
 import { OrreryMap, type Selection } from "./OrreryMap";
 import { AskBar, RailAccordion } from "./RightRail";
@@ -56,6 +57,7 @@ export default function CompanyHome() {
   // A file currently uploading (its name) — sticky banner while the POST runs.
   const [uploading, setUploading] = useState<string | null>(null);
   const [vaultOpen, setVaultOpen] = useState(false);
+  const [transferOpen, setTransferOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const navigate = useNavigate();
 
@@ -100,14 +102,16 @@ export default function CompanyHome() {
     ro.observe(el);
     return () => ro.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected, chatOpen, preview, vaultOpen]);
+  }, [selected, chatOpen, preview, vaultOpen, transferOpen]);
 
   // Changing the selected function (or returning to the company) clears any
-  // open file preview / notice / vault — they belong to the prior selection.
+  // open file preview / notice / vault / transfer — they belong to the prior
+  // selection.
   useEffect(() => {
     setPreview(null);
     setNotice(null);
     setVaultOpen(false);
+    setTransferOpen(false);
   }, [selected]);
 
   const load = useCallback(async () => {
@@ -496,6 +500,12 @@ export default function CompanyHome() {
             <LoginVault accent={accentOf("it")} onClose={() => setVaultOpen(false)} />
             {rail}
           </>
+        ) : transferOpen ? (
+          // The cross-device transfer view fills the canvas; the right rail stays.
+          <>
+            <TransferView accent="#50708a" onClose={() => setTransferOpen(false)} />
+            {rail}
+          </>
         ) : (
           // Normal view: timeline spans the full width across the top; the
           // file panel · map · rail sit in a row beneath it.
@@ -523,6 +533,7 @@ export default function CompanyHome() {
                       onSelect={setSelected}
                       onOpen={(key) => navigate(`/fn/${key}`)}
                       onOpenVault={() => setVaultOpen(true)}
+                      onOpenTransfer={() => setTransferOpen(true)}
                       toolLines={toolLines}
                       onDropFile={async (key, file) => {
                         setUploading(file.name);
