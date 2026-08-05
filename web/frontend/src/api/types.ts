@@ -1021,6 +1021,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/vault/logins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Logins */
+        get: operations["list_logins_api_vault_logins_get"];
+        put?: never;
+        /** Create Login */
+        post: operations["create_login_api_vault_logins_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/vault/logins/{login_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Login */
+        put: operations["update_login_api_vault_logins__login_id__put"];
+        post?: never;
+        /** Delete Login */
+        delete: operations["delete_login_api_vault_logins__login_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1675,6 +1711,68 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** VaultLoginIn */
+        VaultLoginIn: {
+            /** Svc */
+            svc: string;
+            /**
+             * User
+             * @default
+             */
+            user: string;
+            /**
+             * Cat
+             * @default
+             */
+            cat: string;
+            /**
+             * Url
+             * @default
+             */
+            url: string;
+            /**
+             * Desc
+             * @default
+             */
+            desc: string;
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+            /**
+             * Mfa
+             * @default false
+             */
+            mfa: boolean;
+        };
+        /** VaultLoginOut */
+        VaultLoginOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Svc */
+            svc: string;
+            /** User */
+            user: string;
+            /** Cat */
+            cat: string;
+            /** Url */
+            url: string;
+            /** Desc */
+            desc: string;
+            /** Note */
+            note: string;
+            /** Mfa */
+            mfa: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
         };
     };
     responses: never;
@@ -3713,6 +3811,123 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["FileOpResult"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_logins_api_vault_logins_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VaultLoginOut"][];
+                };
+            };
+        };
+    };
+    create_login_api_vault_logins_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VaultLoginIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VaultLoginOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_login_api_vault_logins__login_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                login_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VaultLoginIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VaultLoginOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_login_api_vault_logins__login_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                login_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

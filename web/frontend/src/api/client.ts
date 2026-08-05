@@ -29,6 +29,8 @@ export type LinkFolder = components["schemas"]["LinkFolderOut"];
 export type Home = components["schemas"]["HomeOut"];
 export type FunctionInfo = components["schemas"]["FunctionOut"];
 export type Company = components["schemas"]["CompanyOut"];
+export type VaultLogin = components["schemas"]["VaultLoginOut"];
+export type VaultLoginIn = components["schemas"]["VaultLoginIn"];
 
 export class ApiError extends Error {
   status: number;
@@ -323,4 +325,19 @@ export const api = {
     request<ProposalRecord>(`/api/approvals/${id}/approve`, { method: "POST" }),
   rejectProposal: (id: string) =>
     request<ProposalRecord>(`/api/approvals/${id}/reject`, { method: "POST" }),
+
+  // Credential-account vault (per-user "Account Logins"; metadata only)
+  listLogins: () => request<VaultLogin[]>("/api/vault/logins"),
+  createLogin: (body: VaultLoginIn) =>
+    request<VaultLogin>("/api/vault/logins", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  updateLogin: (id: string, body: VaultLoginIn) =>
+    request<VaultLogin>(`/api/vault/logins/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  deleteLogin: (id: string) =>
+    request<void>(`/api/vault/logins/${id}`, { method: "DELETE" }),
 };

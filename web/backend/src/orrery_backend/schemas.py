@@ -324,3 +324,31 @@ class HomeOut(BaseModel):
     functions: list[FunctionOut]
     timeline: list[TimelineNode]  # union, most-recent-first
     approvals: list[ProposalOut]  # all pending for the user
+
+
+# ── Credential-account vault (per-user "Account Logins") ─────────────
+# Metadata only — never passwords (those live in Bitwarden).
+
+
+class VaultLoginIn(BaseModel):
+    svc: str = Field(min_length=1, max_length=200)  # service name (required)
+    user: str = Field(default="", max_length=320)   # account / email
+    cat: str = Field(default="", max_length=50)      # category
+    url: str = Field(default="", max_length=1000)
+    desc: str = ""                                    # description
+    note: str = ""
+    mfa: bool = False
+
+
+class VaultLoginOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    svc: str
+    user: str
+    cat: str
+    url: str
+    desc: str
+    note: str
+    mfa: bool
+    created_at: datetime

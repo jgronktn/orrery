@@ -437,3 +437,32 @@ class ProjectLinkFolder(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class VaultLogin(Base):
+    """A per-user entry in the IT credential-account vault (the "Account Logins"
+    surface). Metadata only — service, account/username, category, URL, notes,
+    and whether MFA is on. NO passwords: those live in Bitwarden. Scoped to one
+    user; each person sees only their own list, on any machine. Column names use
+    safe (non-reserved) identifiers; the ORM attributes match the UI's fields."""
+
+    __tablename__ = "vault_logins"
+
+    id: Mapped[uuid.UUID] = mapped_column(SAUuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    svc: Mapped[str] = mapped_column(String(200))                            # service name
+    user: Mapped[str] = mapped_column("username", String(320), default="")   # account / email
+    cat: Mapped[str] = mapped_column(String(50), default="")                 # category
+    url: Mapped[str] = mapped_column(String(1000), default="")
+    desc: Mapped[str] = mapped_column("description", Text, default="")
+    note: Mapped[str] = mapped_column(Text, default="")
+    mfa: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
