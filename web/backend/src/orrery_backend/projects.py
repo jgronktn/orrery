@@ -62,6 +62,7 @@ from .schemas import (
     TaskDocOut,
     TaskIn,
     TaskOut,
+    TaskUpdate,
     TimelineDateIn,
     TimelineNode,
     TimelineNoteIn,
@@ -803,6 +804,27 @@ def delete_task(
     db.delete(task)
     db.commit()
     return None
+
+
+@router.patch("/{project_id}/tasks/{task_id}", response_model=TaskOut)
+def update_task(
+    project_id: uuid.UUID,
+    task_id: uuid.UUID,
+    body: TaskUpdate,
+    user: User = Depends(current_user),
+    db: DbSession = Depends(get_db),
+) -> Task:
+    """Update an action item's completion status ("todo"/"done"). Status-only, so
+    it doesn't touch the KB (mirrors the internal agent update)."""
+    get_container(project_id, user, db)  # project membership OR function access
+    task = db.get(Task, task_id)
+    if task is None or task.project_id != project_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "task not found")
+    task.status = body.status
+    task.synthesized = "pending"  # flag for the next synthesis pass
+    db.commit()
+    db.refresh(task)
+    return task
 
 
 # ── Task attachments (link files to an action item) ─────────────────

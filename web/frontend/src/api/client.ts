@@ -161,6 +161,15 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  updateTask: (
+    projectId: string,
+    taskId: string,
+    body: { status: "todo" | "done" },
+  ) =>
+    request<Task>(`/api/projects/${projectId}/tasks/${taskId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
 
   // Persisted conversation (project_id null = global context)
   getMessages: (agentId: string, projectId: string | null) =>

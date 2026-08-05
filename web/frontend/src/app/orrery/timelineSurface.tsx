@@ -23,6 +23,12 @@ const CHIPS = ["note", "decision", "reminder", "task", "milestone"].map(
   (v) => KINDS.find((k) => k.value === v)!,
 );
 
+// Actionable kinds can be completed (marked done). Notes and Decisions are
+// ongoing records — never completed, never shown in the Open Items list.
+export const ACTIONABLE_KINDS = new Set(["task", "milestone", "reminder"]);
+export const isActionable = (kind?: string | null): boolean =>
+  ACTIONABLE_KINDS.has(kind ?? "");
+
 // The kind chips (Note · Decision · Reminder · Action item · Milestone). Click a
 // chip to open the detail form in the right sidebar, or drag it onto the
 // timeline to place it at a date. `kind` highlights the one being composed.
@@ -571,6 +577,7 @@ export function DetailPanel({
   onClose,
   onSetNote,
   onSetDate,
+  onSetStatus,
   onDelete,
 }: {
   node: TimelineNode;
@@ -578,12 +585,16 @@ export function DetailPanel({
   onClose: () => void;
   onSetNote: (note: string | null) => void;
   onSetDate: (date: string) => void;
+  onSetStatus: (status: "todo" | "done") => void;
   onDelete: () => void;
 }) {
   const [note, setNote] = useState(node.note ?? "");
   useEffect(() => setNote(node.note ?? ""), [node.id, node.note]);
   const editable = node.id.startsWith("doc:") || node.id.startsWith("task:");
   const removable = editable;
+  // Only action items / milestones / reminders can be completed.
+  const completable = node.id.startsWith("task:") && isActionable(node.type);
+  const done = node.status === "done";
   const utcDate = new Date(node.time).toISOString().slice(0, 10);
 
   return (
@@ -629,7 +640,22 @@ export function DetailPanel({
           <span style={{ color: accent }}>{daysFromNow(node.time)}</span>
         </Row>
         {node.facet && <Row label="Folder">{node.facet}</Row>}
-        {node.status && <Row label="Status">{node.status}</Row>}
+        {completable && (
+          <Row label="Status">
+            <button
+              onClick={() => onSetStatus(done ? "todo" : "done")}
+              className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[12px] font-medium hover:brightness-105"
+              style={
+                done
+                  ? { borderColor: "#cfe0d8", background: "#eef4f1", color: "#2f6b57" }
+                  : { borderColor: accent, background: accent, color: "#fff" }
+              }
+              title={done ? "Reopen this item" : "Mark this item done"}
+            >
+              {done ? "✓ Done · Reopen" : "Mark done"}
+            </button>
+          </Row>
+        )}
         {node.desc && (
           <Row label="Detail">
             <span className="whitespace-pre-line">{node.desc}</span>

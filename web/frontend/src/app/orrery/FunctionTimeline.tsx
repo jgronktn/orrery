@@ -339,12 +339,13 @@ export function FunctionTimeline({
         {/* tag mode: connectors + axis dots */}
         {placed.map((p) => {
           const color = typeColor(p.node);
+          const done = p.node.status === "done";
           const cardNearY =
             p.side === "above"
               ? axisY - d.axisGap - p.row * d.rowH
               : axisY + d.axisGap + p.row * d.rowH;
           return (
-            <g key={p.node.id}>
+            <g key={p.node.id} opacity={done ? 0.45 : 1}>
               <line x1={p.x} y1={axisY} x2={p.x} y2={cardNearY} stroke={color} strokeWidth={1} opacity={0.5} />
               <circle cx={p.x} cy={axisY} r={3} fill={color} />
             </g>
@@ -356,6 +357,7 @@ export function FunctionTimeline({
           visible.map((n) => {
             const x = xAt(n.time);
             const sel = n.id === selectedId;
+            const done = n.status === "done";
             return (
               <circle
                 key={n.id}
@@ -363,7 +365,8 @@ export function FunctionTimeline({
                 cy={axisY}
                 r={sel ? d.dot + 1.5 : d.dot}
                 fill={typeColor(n)}
-                stroke={sel ? "#1c1b18" : "#f7f5f0"}
+                fillOpacity={done && !sel ? 0.3 : 1}
+                stroke={sel ? "#1c1b18" : done ? typeColor(n) : "#f7f5f0"}
                 strokeWidth={sel ? 1.5 : 1.5}
                 style={{ cursor: onSelect ? "pointer" : "default" }}
                 onMouseDown={(e) => e.stopPropagation()}
@@ -387,6 +390,7 @@ export function FunctionTimeline({
             ? axisY - d.axisGap - p.row * d.rowH - d.cardH
             : axisY + d.axisGap + p.row * d.rowH;
         const selected = p.node.id === selectedId;
+        const done = p.node.status === "done";
         // Emails show "To" (outgoing) / "From" (incoming) instead of the type
         // label; everything else keeps its type label.
         const label =
@@ -417,18 +421,28 @@ export function FunctionTimeline({
                 ? `0 0 0 2px ${color}66, 0 6px 16px -8px ${color}88`
                 : "0 2px 8px -4px rgba(20,18,12,.28)",
               cursor: onSelect ? "pointer" : "default",
+              opacity: done ? 0.62 : 1,
             }}
           >
             {/* colored type strip: rounded on the left (clipped to the card),
-                square vertical edge on the right; near-white type icon */}
+                square vertical edge on the right; near-white type icon. A
+                completed item shows a check here instead of its type glyph. */}
             <span
               className="flex shrink-0 items-center justify-center"
               style={{ width: d.strip, background: color, color: "#f1efe9" }}
             >
-              <TypeGlyph type={p.node.type} size={compact ? 13 : 16} />
+              {done ? (
+                <DoneCheck size={compact ? 13 : 16} />
+              ) : (
+                <TypeGlyph type={p.node.type} size={compact ? 13 : 16} />
+              )}
             </span>
             <span className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 bg-white px-2">
-              <span className="truncate font-medium text-strong" style={{ fontSize: d.titlePx }} title={p.node.name}>
+              <span
+                className={`truncate font-medium ${done ? "text-hint line-through" : "text-strong"}`}
+                style={{ fontSize: d.titlePx }}
+                title={p.node.name}
+              >
                 {p.node.name}
               </span>
               <span className="truncate font-mono uppercase tracking-wide" style={{ fontSize: d.metaPx, color }}>
@@ -539,6 +553,23 @@ export function FunctionTimeline({
         </div>
       )}
     </div>
+  );
+}
+
+// Shown on the colored strip of a completed timeline card (in place of the
+// type glyph), near-white to match the strip's icon color.
+function DoneCheck({ size }: { size: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden>
+      <path
+        d="M3.5 8.5l3 3 6-7"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 

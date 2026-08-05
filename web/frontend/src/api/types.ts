@@ -385,7 +385,12 @@ export interface paths {
         delete: operations["delete_task_api_projects__project_id__tasks__task_id__delete"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Update Task
+         * @description Update an action item's completion status ("todo"/"done"). Status-only, so
+         *     it doesn't touch the KB (mirrors the internal agent update).
+         */
+        patch: operations["update_task_api_projects__project_id__tasks__task_id__patch"];
         trace?: never;
     };
     "/api/projects/{project_id}/tasks/{task_id}/documents": {
@@ -1623,6 +1628,14 @@ export interface components {
              */
             created_at: string;
         };
+        /** TaskUpdate */
+        TaskUpdate: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "todo" | "done";
+        };
         /** TimelineDateIn */
         TimelineDateIn: {
             /** Node Id */
@@ -2537,6 +2550,42 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_task_api_projects__project_id__tasks__task_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskOut"];
+                };
             };
             /** @description Validation Error */
             422: {

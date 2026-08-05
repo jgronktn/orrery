@@ -24,6 +24,7 @@ import {
   Composer,
   Conversation,
   DetailPanel,
+  isActionable,
   KINDS,
 } from "./timelineSurface";
 
@@ -206,6 +207,14 @@ export default function ProjectView() {
       else return;
       setSelectedId(null);
       refresh();
+    } catch (e) {
+      fail(e);
+    }
+  };
+  const setTaskStatus = async (taskId: string, status: "todo" | "done") => {
+    try {
+      await api.updateTask(id, taskId, { status });
+      refresh(); // reloads tasks (Open Items) + timeline (checkmark)
     } catch (e) {
       fail(e);
     }
@@ -479,6 +488,7 @@ export default function ProjectView() {
                 onClose={() => setSelectedId(null)}
                 onSetNote={(note) => void onSetNote(current, note)}
                 onSetDate={(date) => void onSetDate(current, date)}
+                onSetStatus={(status) => void setTaskStatus(current.id.slice(5), status)}
                 onDelete={() => void onDelete(current)}
               />
             ) : (
@@ -487,6 +497,7 @@ export default function ProjectView() {
                 approvals={projApprovals}
                 accent={accent}
                 onSelect={(taskId) => setSelectedId(`task:${taskId}`)}
+                onComplete={(taskId) => void setTaskStatus(taskId, "done")}
                 onResolve={resolve}
               />
             )}
@@ -510,15 +521,19 @@ function OpenItems({
   approvals,
   accent,
   onSelect,
+  onComplete,
   onResolve,
 }: {
   tasks: Task[];
   approvals: ProposalRecord[];
   accent: string;
   onSelect: (taskId: string) => void;
+  onComplete: (taskId: string) => void;
   onResolve: (id: string, okay: boolean) => void;
 }) {
-  const open = tasks.filter((t) => t.status !== "done" && t.kind !== "note");
+  // Only actionable items (action item / milestone / reminder) that aren't done.
+  // Notes and Decisions are ongoing records and never appear here.
+  const open = tasks.filter((t) => isActionable(t.kind) && t.status !== "done");
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
@@ -535,22 +550,47 @@ function OpenItems({
         ) : (
           open.map((t) => {
             const k = KINDS.find((x) => x.value === t.kind);
+            const color = k?.color ?? accent;
             return (
-              <button
+              <div
                 key={t.id}
-                onClick={() => onSelect(t.id)}
-                className="flex w-full items-center gap-2.5 px-5 py-2 text-left hover:bg-rowhover"
+                className="group flex w-full items-center gap-2.5 px-5 py-2 hover:bg-rowhover"
               >
-                <span
-                  className="h-2 w-2 shrink-0 rounded-full"
-                  style={{ background: k?.color ?? accent }}
-                  title={k?.label ?? t.kind}
-                />
-                <span className="min-w-0 flex-1 truncate text-[13px] text-strong">{t.title}</span>
-                {t.due_date && (
-                  <span className="shrink-0 font-mono text-[10px] text-hint">{t.due_date}</span>
-                )}
-              </button>
+                <button
+                  onClick={() => onComplete(t.id)}
+                  title="Mark done"
+                  aria-label={`Mark "${t.title}" done`}
+                  className="grid h-[15px] w-[15px] shrink-0 place-items-center rounded-[4px] border"
+                  style={{ borderColor: color }}
+                >
+                  <svg
+                    width="9"
+                    height="9"
+                    viewBox="0 0 12 12"
+                    aria-hidden
+                    className="opacity-0 transition-opacity group-hover:opacity-100"
+                    style={{ color }}
+                  >
+                    <path
+                      d="M2.5 6.5l2.5 2.5 4.5-5.5"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => onSelect(t.id)}
+                  className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+                >
+                  <span className="min-w-0 flex-1 truncate text-[13px] text-strong">{t.title}</span>
+                  {t.due_date && (
+                    <span className="shrink-0 font-mono text-[10px] text-hint">{t.due_date}</span>
+                  )}
+                </button>
+              </div>
             );
           })
         )}

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
@@ -90,6 +91,11 @@ class TaskIn(BaseModel):
     due_date: date | None = None
     kind: str = "task"  # task | milestone | reminder
     facet: str | None = None
+
+
+class TaskUpdate(BaseModel):
+    # Completion toggle for actionable items (action item / milestone / reminder).
+    status: Literal["todo", "done"]
 
 
 class TaskOut(BaseModel):

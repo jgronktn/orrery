@@ -234,6 +234,15 @@ export default function FunctionStream() {
       fail(e);
     }
   };
+  const onSetStatus = async (node: TimelineNode, status: "todo" | "done") => {
+    if (!streamId || !node.id.startsWith("task:")) return;
+    try {
+      await api.updateTask(streamId, node.id.slice(5), { status });
+      loadTimeline(); // refresh the checkmark on the timeline
+    } catch (e) {
+      fail(e);
+    }
+  };
 
   // Filesystem panel ops (same handlers Company Home gives FunctionFiles).
   const afterFileOp = (path: string, res: { status: string }) => {
@@ -492,6 +501,7 @@ export default function FunctionStream() {
                 onClose={() => setSelectedId(null)}
                 onSetNote={(note) => void onSetNote(current, note)}
                 onSetDate={(date) => void onSetDate(current, date)}
+                onSetStatus={(status) => void onSetStatus(current, status)}
                 onDelete={() => void onDelete(current)}
               />
             ) : (
