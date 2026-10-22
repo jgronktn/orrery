@@ -3,4 +3,4 @@
 # (Docker images build each agent independently from its own pyproject;
 # this root is for local `uv` development across the workspace.)
 [tool.uv.workspace]
-members = ["agents/engineering", "agents/lib"]
+members = ["agents/engineering", "agents/corporate", "agents/ops", "agents/lib"]

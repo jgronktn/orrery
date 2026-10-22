@@ -141,16 +141,19 @@ def create_project(
     db.add(project)
     db.flush()  # assign project.id
     db.add(ProjectMember(project_id=project.id, user_id=user.id, role="owner"))
-    # A project is cross-functional; engineering is the (only) agent today.
+    # A project is cross-functional; it engages its own function's agent
+    # (engineering for agent-less functions), so that agent's PM/research-log
+    # callbacks are allowed here.
+    agent_id = functions.agent_for_function(fn) or "engineering"
     db.add(
         ProjectAgent(
-            project_id=project.id, agent_id="engineering", role="primary",
+            project_id=project.id, agent_id=agent_id, role="primary",
             added_by=user.id,
         )
     )
     db.add(
         ProjectMemberAgent(
-            project_id=project.id, user_id=user.id, agent_id="engineering",
+            project_id=project.id, user_id=user.id, agent_id=agent_id,
             can_talk=True, can_approve=True,
         )
     )
@@ -375,6 +378,16 @@ def build_timeline(container: Project, facet: str | None, db: DbSession) -> list
                 "note": t.note,
             }
         )
+
+    # Operations shipments: one marker per shipment; its documents are shown
+    # with the shipment, not as loose files in the git scan.
+    from .ops import shipments as ops_shipments  # local: ops imports this module
+
+    nodes = [
+        n for n in nodes
+        if not n["id"].startswith(f"file:{ops_shipments.SHIPMENTS_DIR}/")
+    ]
+    nodes += ops_shipments.timeline_nodes(container, db)
 
     if facet:
         nodes = [n for n in nodes if n.get("facet") == facet]

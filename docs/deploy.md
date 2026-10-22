@@ -76,7 +76,7 @@ scp service-account.json orrery@<droplet>:~/orrery/service-account.json
 ## Build + run (as orrery, in `~/orrery`)
 
 ```bash
-docker compose -f docker-compose.prod.yml build          # 3 Python images (slow first time)
+docker compose -f docker-compose.prod.yml build          # 4 Python images (slow first time)
 docker compose -f docker-compose.prod.yml --profile build run --rm frontend-builder
 docker compose -f docker-compose.prod.yml up -d          # backend auto-runs `alembic upgrade head`
 docker compose -f docker-compose.prod.yml ps             # all services healthy

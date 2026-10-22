@@ -32,6 +32,8 @@ export type Company = components["schemas"]["CompanyOut"];
 export type VaultLogin = components["schemas"]["VaultLoginOut"];
 export type VaultLoginIn = components["schemas"]["VaultLoginIn"];
 export type TransferItem = components["schemas"]["TransferItemOut"];
+export type Shipment = components["schemas"]["ShipmentOut"];
+export type ShipmentIn = components["schemas"]["ShipmentIn"];
 
 export class ApiError extends Error {
   status: number;
@@ -370,4 +372,39 @@ export const api = {
   transferDownloadUrl: (id: string) => `${BASE}/api/transfer/${id}/download`,
   deleteTransfer: (id: string) =>
     request<void>(`/api/transfer/${id}`, { method: "DELETE" }),
+
+  // Operations: shipments (OPS shipping domain; humans create + edit)
+  listShipments: (params?: { direction?: string; q?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.direction) qs.set("direction", params.direction);
+    if (params?.q) qs.set("q", params.q);
+    const tail = qs.toString();
+    return request<Shipment[]>(`/api/ops/shipments${tail ? `?${tail}` : ""}`);
+  },
+  getShipment: (id: string) => request<Shipment>(`/api/ops/shipments/${id}`),
+  createShipment: (body: ShipmentIn) =>
+    request<Shipment>("/api/ops/shipments", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  updateShipment: (id: string, body: ShipmentIn) =>
+    request<Shipment>(`/api/ops/shipments/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  deleteShipment: (id: string) =>
+    request<void>(`/api/ops/shipments/${id}`, { method: "DELETE" }),
+  uploadShipmentDocs: (id: string, files: File[]) => {
+    const form = new FormData();
+    for (const f of files) form.append("files", f);
+    return request<Shipment>(`/api/ops/shipments/${id}/documents`, {
+      method: "POST",
+      body: form,
+    });
+  },
+  unlinkShipmentDoc: (id: string, path: string) =>
+    request<Shipment>(
+      `/api/ops/shipments/${id}/documents?path=${encodeURIComponent(path)}`,
+      { method: "DELETE" },
+    ),
 };

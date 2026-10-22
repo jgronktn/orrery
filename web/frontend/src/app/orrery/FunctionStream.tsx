@@ -15,8 +15,9 @@ import { FunctionFiles } from "./FunctionFiles";
 import { FunctionTimeline } from "./FunctionTimeline";
 import { AskBar, RailAccordion } from "./RightRail";
 import { Shell } from "./Shell";
+import { ShipmentsPanel } from "./ShipmentsPanel";
 import { accentOf } from "./theme";
-import { isActivity, nodeStorePath, todayISO } from "./timelineScale";
+import { isActivity, nodeStorePath, shipmentIdOf, todayISO } from "./timelineScale";
 import {
   CanvasAccordion,
   AddItemForm,
@@ -27,6 +28,11 @@ import {
 
 // The function page: a ~250px activity timeline + composer in the main area,
 // and a 25% right sidebar with pending approvals over the agent ask.
+
+// Operations domains shown as canvas sections on the ops page (one per domain;
+// inventory, purchasing, … join this list as they come online).
+const OPS_DOMAINS = [{ id: "shipments", title: "Shipments" }] as const;
+const defaultPane = (key: string) => (key === "ops" ? "shipments" : "projects");
 export default function FunctionStream() {
   const { key = "" } = useParams();
   const [searchParams] = useSearchParams();
@@ -43,7 +49,14 @@ export default function FunctionStream() {
   const [showAll] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   // Which canvas-pane accordion section is expanded.
-  const [pane, setPane] = useState<"projects" | "conversation">("projects");
+  const [pane, setPane] = useState<string>(defaultPane(key));
+  // A shipment to open in the Shipments section (from its timeline marker).
+  const [shipFocus, setShipFocus] = useState<{ id: string; n: number } | null>(null);
+  const focusShipment = (id: string) => {
+    setPane("shipments");
+    setPreview(null);
+    setShipFocus((cur) => ({ id, n: (cur?.n ?? 0) + 1 }));
+  };
   const [pending, setPending] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // Composer: which kind icon is armed + the title/date being entered.
@@ -89,6 +102,8 @@ export default function FunctionStream() {
     if (n) {
       setSelectedId(n.id);
       setRevealTime(n.time);
+      const sid = shipmentIdOf(n);
+      if (sid) focusShipment(sid);
       deepLinkApplied.current = nodeId;
     }
   }, [searchParams, nodes]);
@@ -115,7 +130,7 @@ export default function FunctionStream() {
   // Load this function-stream's persisted conversation once the agent + stream
   // are known. Projects stays the default open pane; asking switches to it.
   useEffect(() => {
-    setPane("projects");
+    setPane(defaultPane(key));
     setMessages([]);
     if (!fn?.agent || !fn.stream_id) return;
     api
@@ -124,7 +139,7 @@ export default function FunctionStream() {
         setMessages(ms);
       })
       .catch(() => undefined);
-  }, [fn?.agent, fn?.stream_id]);
+  }, [fn?.agent, fn?.stream_id, key]);
 
   // The opened file's timeline node (so we can zoom to it, even if curated out).
   const focusNode = preview ? nodes.find((n) => n.path === preview.path) ?? null : null;
@@ -135,6 +150,9 @@ export default function FunctionStream() {
       : base;
   })();
   const current = selectedId ? nodes.find((n) => n.id === selectedId) ?? null : null;
+  // Shipments open in their own form (Shipments section), not the generic
+  // detail panel.
+  const detailNode = current && !shipmentIdOf(current) ? current : null;
   const fnApprovals = fn
     ? approvals.filter(
         (p) =>
@@ -388,6 +406,8 @@ export default function FunctionStream() {
                 // Selecting on the timeline drives the tree highlight; clear a
                 // stale open-file preview so it doesn't keep winning activePath.
                 if (n) setPreview(null);
+                const sid = shipmentIdOf(n);
+                if (sid) focusShipment(sid);
               }}
               onDropFile={(f) => void onDropFile(f)}
               onDropKind={onDropKind}
@@ -444,8 +464,21 @@ export default function FunctionStream() {
               ) : (
                 <CanvasAccordion
                   openId={pane}
-                  onOpen={(id) => setPane(id as "projects" | "conversation")}
+                  onOpen={setPane}
                   sections={[
+                    ...(key === "ops"
+                      ? OPS_DOMAINS.map((d) => ({
+                          id: d.id,
+                          title: d.title,
+                          body: (
+                            <ShipmentsPanel
+                              accent={accent}
+                              focus={shipFocus}
+                              onChanged={refreshFiles}
+                            />
+                          ),
+                        }))
+                      : []),
                     ...(fn?.agent
                       ? [
                           {
@@ -494,15 +527,15 @@ export default function FunctionStream() {
             />
           )}
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-            {current ? (
+            {detailNode ? (
               <DetailPanel
-                node={current}
+                node={detailNode}
                 accent={accent}
                 onClose={() => setSelectedId(null)}
-                onSetNote={(note) => void onSetNote(current, note)}
-                onSetDate={(date) => void onSetDate(current, date)}
-                onSetStatus={(status) => void onSetStatus(current, status)}
-                onDelete={() => void onDelete(current)}
+                onSetNote={(note) => void onSetNote(detailNode, note)}
+                onSetDate={(date) => void onSetDate(detailNode, date)}
+                onSetStatus={(status) => void onSetStatus(detailNode, status)}
+                onDelete={() => void onDelete(detailNode)}
               />
             ) : (
               <RailAccordion

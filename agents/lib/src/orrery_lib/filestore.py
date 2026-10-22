@@ -459,12 +459,15 @@ def build_engineering_reader() -> FileStoreReader:
 
 
 def build_reader(
-    folders: list[str], extra_paths: list[str] | None = None
+    folders: list[str],
+    extra_paths: list[str] | None = None,
+    function_root: str = "engineering",
 ) -> FileStoreReader:
     """Reader over the given FILES_ROOT-relative folders (e.g. a project's
-    'projects/<slug>'), always including the engineering corpus. Used per-run
-    to scope the agent to the current container's files — where dropped
-    documents and emails land — plus its engineering references.
+    'projects/<slug>'), always including the agent's own function corpus
+    (`function_root`, default the engineering corpus). Used per-run to scope
+    the agent to the current container's files — where dropped documents and
+    emails land — plus its function's references.
 
     `extra_paths` are individual FILES_ROOT-relative files (e.g. specs linked
     into a project from another function's corpus) added as read-only roots, so
@@ -475,7 +478,7 @@ def build_reader(
         cleaned = (f or "").strip().strip("/")
         if cleaned:
             roots.append(FILES_ROOT / cleaned)
-    roots.append(ENGINEERING_ROOT)
+    roots.append(FILES_ROOT / function_root)
     for p in extra_paths or []:
         cleaned = (p or "").strip().strip("/")
         if cleaned:

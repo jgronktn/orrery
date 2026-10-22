@@ -77,6 +77,7 @@ export const TYPE_COLOR: Record<string, string> = {
   reminder: "#a86676", // clay-rose
   note: "#66707f", // muted slate
   decision: "#4f8073", // muted teal-green
+  shipment: "#7a5c3e", // kraft brown (an OPS shipment record)
   other: "#79776b", // greige
 };
 export const TYPE_LABEL: Record<string, string> = {
@@ -92,6 +93,7 @@ export const TYPE_LABEL: Record<string, string> = {
   reminder: "Reminder",
   note: "Note",
   decision: "Decision",
+  shipment: "Shipment",
   other: "File",
 };
 
@@ -106,7 +108,12 @@ export function typeLabel(n: TimelineNode): string {
  * milestones (id doc:/task:). Native git-scanned corpus files (file:) are
  * excluded unless the user opts to show all. */
 export function isActivity(n: TimelineNode): boolean {
-  return n.id.startsWith("doc:") || n.id.startsWith("task:");
+  return n.id.startsWith("doc:") || n.id.startsWith("task:") || n.id.startsWith("ship:");
+}
+
+/** The shipment id behind an OPS shipment timeline node, else null. */
+export function shipmentIdOf(n: TimelineNode | null | undefined): string | null {
+  return n && n.id.startsWith("ship:") ? n.id.slice(5) : null;
 }
 
 /** The FILES_ROOT-relative store path for a file/email timeline node — for

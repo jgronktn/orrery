@@ -298,6 +298,14 @@ export function TypeGlyph({ type, size = 16 }: { type: string; size?: number }) 
           <path d="M5.6 8l1.6 1.6L10.8 6" />
         </svg>
       );
+    case "shipment":
+      // a parcel box
+      return (
+        <svg {...props}>
+          <path d="M2.5 5L8 2.5 13.5 5v6L8 13.5 2.5 11z" />
+          <path d="M2.5 5L8 7.5 13.5 5M8 7.5v6" />
+        </svg>
+      );
     case "email":
       return (
         <svg {...props}>

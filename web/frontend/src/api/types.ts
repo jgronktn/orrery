@@ -1147,6 +1147,94 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ops/shipments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Shipments */
+        get: operations["list_shipments_api_ops_shipments_get"];
+        put?: never;
+        /** Create Shipment */
+        post: operations["create_shipment_api_ops_shipments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ops/shipments/{shipment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Shipment */
+        get: operations["get_shipment_api_ops_shipments__shipment_id__get"];
+        /** Update Shipment */
+        put: operations["update_shipment_api_ops_shipments__shipment_id__put"];
+        post?: never;
+        /**
+         * Delete Shipment
+         * @description Delete the record and its document links. The files stay in the store
+         *     (in the shipment's folder, with git history).
+         */
+        delete: operations["delete_shipment_api_ops_shipments__shipment_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ops/shipments/{shipment_id}/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload Shipment Documents
+         * @description Attach one or more documents (packing slip, receipt, …) to a shipment.
+         *     Each is saved into the shipment's own folder as a cataloged ops file
+         *     (versioned, text-extracted, embedded for search) and linked to the record.
+         */
+        post: operations["upload_shipment_documents_api_ops_shipments__shipment_id__documents_post"];
+        /**
+         * Unlink Shipment Document
+         * @description Unlink a document from the shipment. The file itself stays in the store.
+         */
+        delete: operations["unlink_shipment_document_api_ops_shipments__shipment_id__documents_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/agent/ops/shipments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Agent List Shipments
+         * @description The shipment log for the OPS agent. Only the ops agent may read it, and
+         *     only on behalf of a user with Operations access.
+         */
+        get: operations["agent_list_shipments_internal_agent_ops_shipments_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1264,6 +1352,11 @@ export interface components {
             file: string;
             /** Dir */
             dir?: string | null;
+        };
+        /** Body_upload_shipment_documents_api_ops_shipments__shipment_id__documents_post */
+        Body_upload_shipment_documents_api_ops_shipments__shipment_id__documents_post: {
+            /** Files */
+            files: string[];
         };
         /** Body_upload_task_document_api_projects__project_id__tasks__task_id__documents_post */
         Body_upload_task_document_api_projects__project_id__tasks__task_id__documents_post: {
@@ -1652,6 +1745,120 @@ export interface components {
             query: string;
             /** Project Id */
             project_id?: string | null;
+        };
+        /** ShipmentDocOut */
+        ShipmentDocOut: {
+            /** Path */
+            path: string;
+            /** Name */
+            name: string;
+        };
+        /** ShipmentIn */
+        ShipmentIn: {
+            /**
+             * Direction
+             * @enum {string}
+             */
+            direction: "inbound" | "outbound";
+            /**
+             * Status
+             * @default pending
+             * @enum {string}
+             */
+            status: "pending" | "in_transit" | "delivered" | "cancelled";
+            /**
+             * Shipped On
+             * Format: date
+             */
+            shipped_on: string;
+            /** Received On */
+            received_on?: string | null;
+            /**
+             * Carrier
+             * @default
+             */
+            carrier: string;
+            /**
+             * Tracking Number
+             * @default
+             */
+            tracking_number: string;
+            /**
+             * Counterparty
+             * @default
+             */
+            counterparty: string;
+            /**
+             * Contents
+             * @default
+             */
+            contents: string;
+            /**
+             * Po Ref
+             * @default
+             */
+            po_ref: string;
+            /**
+             * Notes
+             * @default
+             */
+            notes: string;
+            /** Project Id */
+            project_id?: string | null;
+        };
+        /** ShipmentOut */
+        ShipmentOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Direction */
+            direction: string;
+            /** Status */
+            status: string;
+            /**
+             * Shipped On
+             * Format: date
+             */
+            shipped_on: string;
+            /** Received On */
+            received_on?: string | null;
+            /** Carrier */
+            carrier: string;
+            /** Tracking Number */
+            tracking_number: string;
+            /** Tracking Url */
+            tracking_url?: string | null;
+            /** Counterparty */
+            counterparty: string;
+            /** Contents */
+            contents: string;
+            /** Po Ref */
+            po_ref: string;
+            /** Notes */
+            notes: string;
+            /** Project Id */
+            project_id?: string | null;
+            /** Project Name */
+            project_name?: string | null;
+            /** Folder */
+            folder: string;
+            /**
+             * Documents
+             * @default []
+             */
+            documents: components["schemas"]["ShipmentDocOut"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
         };
         /** TaskDocLinkIn */
         TaskDocLinkIn: {
@@ -4241,6 +4448,271 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_shipments_api_ops_shipments_get: {
+        parameters: {
+            query?: {
+                direction?: string | null;
+                q?: string | null;
+                since?: string | null;
+                until?: string | null;
+                project_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShipmentOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_shipment_api_ops_shipments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShipmentIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShipmentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_shipment_api_ops_shipments__shipment_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                shipment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShipmentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_shipment_api_ops_shipments__shipment_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                shipment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShipmentIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShipmentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_shipment_api_ops_shipments__shipment_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                shipment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_shipment_documents_api_ops_shipments__shipment_id__documents_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                shipment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_shipment_documents_api_ops_shipments__shipment_id__documents_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShipmentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unlink_shipment_document_api_ops_shipments__shipment_id__documents_delete: {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header?: never;
+            path: {
+                shipment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShipmentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agent_list_shipments_internal_agent_ops_shipments_get: {
+        parameters: {
+            query?: {
+                direction?: string | null;
+                q?: string | null;
+                since?: string | null;
+                until?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShipmentOut"][];
+                };
             };
             /** @description Validation Error */
             422: {

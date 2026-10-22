@@ -18,6 +18,7 @@ export const ACCENTS: Record<string, string> = {
   it: "#4E7E8E", // IT — steel
   hr: "#B25C72", // Human Resources — rose
   acct: "#A8842C", // Accounting — amber
+  ops: "#6B7A3A", // Operations — olive
 };
 
 export const FALLBACK_ACCENT = "#6E6960";
@@ -37,9 +38,10 @@ export function tint(accent: string, alpha: string): string {
 export const GEOMETRY: Record<string, FnTheme> = {
   engr: { r: 155, a: 300 },
   corp: { r: 150, a: 198 },
-  it: { r: 185, a: 18 },
+  it: { r: 185, a: 350 },
   hr: { r: 175, a: 148 },
   acct: { r: 150, a: 98 },
+  ops: { r: 175, a: 44 }, // midway between IT (350) and Accounting (98)
 };
 
 export const STAGE = 580;
@@ -74,5 +76,6 @@ export function funcLabel(key: string | null | undefined): string {
 export function fnAbbr(key: string, name: string): string {
   if (key === "it") return "IT";
   if (key === "hr") return "HR";
+  if (key === "ops") return "OPS";
   return name.slice(0, 1).toUpperCase();
 }

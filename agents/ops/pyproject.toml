@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "orrery-ops"
+version = "0.1.0"
+description = "Orrery operations (ops) agent — shipment log Q&A + ops drafting."
+requires-python = ">=3.12"
+dependencies = [
+    "orrery-lib[agent]",
+    "pydantic-ai>=0.4,<1.0",
+    "httpx>=0.27,<1.0",
+    # HTTP service (the agent is a stateless service the backend calls).
+    # Capped <0.137 to match the backend (otel-fastapi instrumentation compat).
+    "fastapi>=0.110,<0.137",
+    "uvicorn[standard]>=0.29,<1.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<9"]
+
+[project.scripts]
+orrery-ops = "orrery_ops.__main__:main"
+
+# Resolve orrery-lib from the local workspace (for `uv`). The Docker build
+# installs lib explicitly before this package, so pip is satisfied.
+[tool.uv.sources]
+orrery-lib = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/orrery_ops"]

@@ -36,6 +36,10 @@ class BackendClient:
                 return None
             return resp.json()
 
+    async def get(self, path: str, params: dict | None = None):
+        """GET any /internal/agent route (e.g. a domain's read route)."""
+        return await self._req("GET", path, params=params)
+
     async def list_tasks(self):
         return await self._req("GET", "/internal/agent/tasks")
 

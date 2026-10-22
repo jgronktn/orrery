@@ -60,6 +60,29 @@ x-corporate-volumes: &corporate-volumes
   - /var/lib/orrery/files:/var/lib/orrery/files:rw
   - ./logs:/app/logs
 
+# ── Shared config for the operations (ops) agent image ──
+x-ops-build: &ops-build
+  build:
+    context: ./agents
+    dockerfile: ops/Dockerfile
+
+x-ops-env: &ops-env
+  ORRERY_GATEWAY_URL: "http://gateway:4000/v1"
+  ORRERY_MODEL: "claude-sonnet"
+  ORRERY_QDRANT_URL: "http://qdrant:6333"
+  ORRERY_EMBED_MODEL: "BAAI/bge-small-en-v1.5"
+  # The document store (filesystem). OPS reads ops/ + the current container.
+  ORRERY_FILES_ROOT: "/var/lib/orrery/files"
+  # Don't trace healthcheck requests (see engineering env note).
+  OTEL_PYTHON_EXCLUDED_URLS: "health"
+
+x-ops-volumes: &ops-volumes
+  - ./agents/ops/src:/app/ops/src:ro
+  - ./config:/app/config:ro
+  # The document store, read-write (OPS writes approved drafts here).
+  - /var/lib/orrery/files:/var/lib/orrery/files:rw
+  - ./logs:/app/logs
+
 services:
   gateway:
     # LiteLLM is a small Python/FastAPI proxy that speaks the OpenAI
@@ -202,6 +225,44 @@ services:
       start_period: 30s
 
   # ─────────────────────────────────────────────────────────────────────
+  # Operations (ops) agent as an HTTP service. The backend calls it at
+  # http://ops:8003/run. Stateless; reads ops/ + the current container.
+  # ─────────────────────────────────────────────────────────────────────
+  ops:
+    <<: *ops-build
+    image: orrery-ops:latest
+    container_name: orrery-ops
+    restart: unless-stopped
+    user: *run-as-host-user
+    env_file:
+      - .env
+    environment: *ops-env
+    volumes: *ops-volumes
+    entrypoint: ["uvicorn"]
+    command:
+      - "orrery_ops.server:app"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8003"
+      - "--reload"
+      - "--reload-dir"
+      - "/app/ops/src"
+    ports:
+      - "8003:8003"  # exposed for debugging; the backend uses the in-network name
+    depends_on:
+      gateway:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; urllib.request.urlopen('http://localhost:8003/health', timeout=3).read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # ─────────────────────────────────────────────────────────────────────
   # The same image as a CLI. Not started by `compose up` (profile: cli);
   # run via `make chat` / `make ask Q="..."`.
   # ─────────────────────────────────────────────────────────────────────
@@ -263,6 +324,7 @@ services:
       ORRERY_DATABASE_URL: "postgresql+psycopg://orrery:orrery@postgres:5432/orrery"
       ORRERY_ENGINEERING_AGENT_URL: "http://engineering:8001"
       ORRERY_CORPORATE_AGENT_URL: "http://corporate:8002"
+      ORRERY_OPS_AGENT_URL: "http://ops:8003"
       ORRERY_SESSION_SECRET: "${ORRERY_SESSION_SECRET:-dev-insecure-change-me}"
       ORRERY_FILES_ROOT: "/var/lib/orrery/files"
       ORRERY_QDRANT_URL: "http://qdrant:6333"
@@ -283,6 +345,8 @@ services:
       engineering:
         condition: service_healthy
       corporate:
+        condition: service_healthy
+      ops:
         condition: service_healthy
       qdrant:
         condition: service_healthy

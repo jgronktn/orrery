@@ -80,10 +80,10 @@ function layoutLanes(
     const x = xAt(node.time);
     const left = x - cardW / 2;
     const right = x + cardW / 2;
-    // Emails are placed by direction (outgoing above, incoming below); every
-    // other item keeps the alternating above/below packing.
-    const isEmail = node.type === "email" && !!node.direction;
-    let side: "above" | "below" = isEmail
+    // Emails and shipments are placed by direction (outgoing above, incoming
+    // below); every other item keeps the alternating above/below packing.
+    const directional = (node.type === "email" || node.type === "shipment") && !!node.direction;
+    let side: "above" | "below" = directional
       ? node.direction === "out"
         ? "above"
         : "below"
@@ -95,8 +95,8 @@ function layoutLanes(
     let row = freeRow(rows, left);
 
     // If this side is full at this x, spill to the other side before giving up
-    // (non-emails only — email side carries in/out meaning).
-    if (row >= cap && !isEmail) {
+    // (non-directional items only — their side carries in/out meaning).
+    if (row >= cap && !directional) {
       const oRows = side === "above" ? rowsBelow : rowsAbove;
       const oCap = side === "above" ? maxBelow : maxAbove;
       const oRow = freeRow(oRows, left);

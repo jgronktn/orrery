@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
 import {
   ApiError,
@@ -17,7 +17,7 @@ import { FunctionTimeline } from "./FunctionTimeline";
 import { AskBar } from "./RightRail";
 import { Shell } from "./Shell";
 import { accentOf } from "./theme";
-import { isActivity, nodeStorePath, todayISO } from "./timelineScale";
+import { isActivity, nodeStorePath, shipmentIdOf, todayISO } from "./timelineScale";
 import {
   AddItemForm,
   CanvasAccordion,
@@ -34,6 +34,7 @@ import {
 // rest of the main area (below the timeline) is built out next.
 export default function ProjectView() {
   const { id = "" } = useParams();
+  const navigate = useNavigate();
 
   const [project, setProject] = useState<Project | null>(null);
   const [nodes, setNodes] = useState<TimelineNode[]>([]);
@@ -64,10 +65,11 @@ export default function ProjectView() {
   const [uploading, setUploading] = useState<string | null>(null);
 
   const accent = accentOf(project?.function ?? "");
-  // The project's agent = its function's agent: a corporate project talks to
-  // the Executive Assistant, everything else to engineering (the default).
-  const agentId = project?.function === "corp" ? "corporate" : "engineering";
-  const agentName = agentId === "corporate" ? "Executive Assistant" : "Engineering";
+  // The project's agent = its function's agent (from the function registry),
+  // falling back to engineering for agent-less functions. Empty until known.
+  const [agent, setAgent] = useState<{ id: string; name: string } | null>(null);
+  const agentId = agent?.id ?? "";
+  const agentName = agent?.name ?? "Agent";
 
   const loadTimeline = useCallback(() => {
     api.projectTimeline(id).then(setNodes).catch(() => undefined);
@@ -88,9 +90,26 @@ export default function ProjectView() {
     api.getProject(id).then(setProject).catch((e) => setErr(String(e)));
   }, [id]);
   useEffect(() => {
+    if (!project) return;
+    let live = true;
+    Promise.all([
+      project.function ? api.getFunction(project.function) : Promise.resolve(null),
+      api.listAgents(),
+    ])
+      .then(([f, agents]) => {
+        const aid = f?.agent ?? "engineering";
+        const name = agents.find((a) => a.id === aid)?.name ?? aid;
+        if (live) setAgent({ id: aid, name });
+      })
+      .catch(() => live && setAgent({ id: "engineering", name: "Engineering" }));
+    return () => {
+      live = false;
+    };
+  }, [project]);
+  useEffect(() => {
     // Load the persisted conversation (the canvas Conversation pane is always
     // present; this just fills its history) for the project's agent.
-    if (!project) return;
+    if (!project || !agentId) return;
     setMessages([]);
     api
       .getMessages(agentId, id)
@@ -288,6 +307,7 @@ export default function ProjectView() {
     }
   };
   const onAsk = async (prompt: string) => {
+    if (!agentId) return;
     setPreview(null); // surface the Conversation pane over any open file
     setPending(prompt);
     setBusy(true);
@@ -366,6 +386,11 @@ export default function ProjectView() {
               selectedId={current?.id ?? null}
               focusTime={focusNode?.time ?? revealTime}
               onSelect={(n) => {
+                // A linked shipment opens in the Operations shipment log.
+                if (shipmentIdOf(n)) {
+                  navigate(`/fn/ops?node=${encodeURIComponent(n!.id)}`);
+                  return;
+                }
                 setSelectedId(n ? n.id : null);
                 // Selecting on the timeline drives the tree highlight; clear a
                 // stale open-file preview so it doesn't keep winning activePath.

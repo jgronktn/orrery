@@ -494,3 +494,66 @@ class TransferItem(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class Shipment(Base):
+    """An operations shipment record (the OPS agent's shipping domain): one
+    package/consignment in (`inbound`) or out (`outbound`). Humans create and
+    edit these through the UI form; the OPS agent only reads them. Its documents
+    (packing slips, carrier receipts) live together in the store under
+    `folder` and are linked via ShipmentDocument."""
+
+    __tablename__ = "shipments"
+
+    id: Mapped[uuid.UUID] = mapped_column(SAUuid, primary_key=True, default=uuid.uuid4)
+    direction: Mapped[str] = mapped_column(String(10), index=True)  # inbound | outbound
+    status: Mapped[str] = mapped_column(String(20), default="pending")  # pending | in_transit | delivered | cancelled
+    shipped_on: Mapped[date] = mapped_column(Date, index=True)
+    received_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    carrier: Mapped[str] = mapped_column(String(100), default="")
+    tracking_number: Mapped[str] = mapped_column(String(100), default="")
+    counterparty: Mapped[str] = mapped_column(String(200), default="")
+    contents: Mapped[str] = mapped_column(Text, default="")
+    po_ref: Mapped[str] = mapped_column(String(100), default="")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    # Optional link to a bounded project — the shipment then also shows on
+    # that project's timeline.
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    # The shipment's own folder in the store (FILES_ROOT-relative), fixed at
+    # creation so later edits never scatter its documents.
+    folder: Mapped[str] = mapped_column(String(500))
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    documents: Mapped[list["ShipmentDocument"]] = relationship(
+        back_populates="shipment", cascade="all, delete-orphan",
+        order_by="ShipmentDocument.created_at",
+    )
+
+
+class ShipmentDocument(Base):
+    """A document attached to a shipment (packing slip, receipt, …). The file
+    itself is a cataloged store file; this row links its path to the shipment.
+    Unlinking (or deleting the shipment) removes the link, never the file."""
+
+    __tablename__ = "shipment_documents"
+
+    id: Mapped[uuid.UUID] = mapped_column(SAUuid, primary_key=True, default=uuid.uuid4)
+    shipment_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("shipments.id", ondelete="CASCADE"), index=True
+    )
+    doc_path: Mapped[str] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    shipment: Mapped["Shipment"] = relationship(back_populates="documents")

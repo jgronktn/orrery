@@ -377,3 +377,46 @@ class TransferItemOut(BaseModel):
     content_type: str | None = None
     size: int | None = None
     created_at: datetime
+
+
+# ── Operations: shipments (OPS shipping domain) ─────────────────────
+
+
+class ShipmentIn(BaseModel):
+    direction: Literal["inbound", "outbound"]
+    status: Literal["pending", "in_transit", "delivered", "cancelled"] = "pending"
+    shipped_on: date
+    received_on: date | None = None
+    carrier: str = Field(default="", max_length=100)
+    tracking_number: str = Field(default="", max_length=100)
+    counterparty: str = Field(default="", max_length=200)  # who it went to / came from
+    contents: str = ""
+    po_ref: str = Field(default="", max_length=100)  # PO / order number
+    notes: str = ""
+    project_id: uuid.UUID | None = None
+
+
+class ShipmentDocOut(BaseModel):
+    path: str  # FILES_ROOT-relative; open via /api/files/raw?path=
+    name: str
+
+
+class ShipmentOut(BaseModel):
+    id: uuid.UUID
+    direction: str
+    status: str
+    shipped_on: date
+    received_on: date | None = None
+    carrier: str
+    tracking_number: str
+    tracking_url: str | None = None  # carrier's own tracking page, if known
+    counterparty: str
+    contents: str
+    po_ref: str
+    notes: str
+    project_id: uuid.UUID | None = None
+    project_name: str | None = None
+    folder: str
+    documents: list[ShipmentDocOut] = []
+    created_at: datetime
+    updated_at: datetime

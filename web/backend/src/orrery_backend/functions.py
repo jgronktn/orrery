@@ -59,6 +59,9 @@ FUNCTIONS: dict[str, FunctionDef] = {
     "it": FunctionDef("it", "IT", None, "it"),
     "hr": FunctionDef("hr", "HR", None, "hr"),
     "acct": FunctionDef("acct", "Accounting", None, "accounting"),
+    # Operations — home of the OPS agent. One facet per ops domain (shipping
+    # first; inventory, purchasing, … join as they come online).
+    "ops": FunctionDef("ops", "Operations", "ops", "ops", facets=("shipping",)),
 }
 
 
@@ -66,9 +69,10 @@ def facets_for(function: str | None) -> list[str]:
     f = FUNCTIONS.get(function or "")
     return list(f.facets) if f else []
 
-# All five functions are provisioned (Engineering has an agent; the rest are
-# agent-less containers — manual file/timeline tracking works regardless).
-ACTIVE_FUNCTIONS: tuple[str, ...] = ("corp", "engr", "it", "hr", "acct")
+# All six functions are provisioned (Corporate, Engineering, and Operations
+# have agents; the rest are agent-less containers — manual file/timeline
+# tracking works regardless).
+ACTIVE_FUNCTIONS: tuple[str, ...] = ("corp", "engr", "it", "hr", "acct", "ops")
 
 
 def agent_for_function(function: str | None) -> str | None:
